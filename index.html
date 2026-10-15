@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#2196f3">
     <title>Generador de Códigos de Barras</title>
     <link rel="manifest" href="manifest.json">
-    <link rel="stylesheet" href="styles.css?v=6">
+    <link rel="stylesheet" href="styles.css?v=7">
     <link rel="icon" type="image/png" href="icons/icon-192.png">
 </head>
 <body>
@@ -19,31 +19,19 @@
         </header>
 
         <main>
-            <!-- Pantalla 1: Inicio -->
+            <!-- Pantalla 1: Inicio (Siempre visible) -->
             <section class="camera-section">
-                <button id="camera-btn" class="btn-primary">📷 Tomar Foto</button>
+                <button id="camera-btn" class="btn-primary">📷 Tomar Nueva Foto</button>
                 <button id="gallery-btn" class="btn-secondary">🖼️ Subir desde Galería</button>
-                <div style="margin: 15px 0; text-align: center; color: var(--text-secondary); font-size: 0.9rem;">— O si copiaste el texto de la imagen —</div>
-                <button id="paste-btn" class="btn-secondary">📋 Pegar texto copiado del móvil</button>
-                
                 <input type="file" id="camera-input" accept="image/*" capture="environment" style="display: none;">
                 <input type="file" id="gallery-input" accept="image/*" style="display: none;">
-            </section>
-
-            <!-- Pantalla 1b: Pegar Texto -->
-            <section id="paste-section" class="paste-section hidden">
-                <h2>Pega el texto aquí</h2>
-                <p class="hint">Copia el texto desde la foto en tu galería y pégalo en este cuadro:</p>
-                <textarea id="paste-textarea" rows="6" placeholder="Pega aquí el texto de la tabla..."></textarea>
-                <button id="process-paste-btn" class="btn-primary">🔍 Procesar Texto Pegado</button>
-                <button id="cancel-paste-btn" class="btn-secondary">Volver</button>
             </section>
 
             <!-- Pantalla 2: Vista Previa -->
             <section id="preview-section" class="preview-section hidden">
                 <h2>Imagen cargada</h2>
                 <img id="preview-image" alt="Vista previa">
-                <button id="process-btn" class="btn-primary">🔍 Procesar Imagen (Local)</button>
+                <button id="process-btn" class="btn-primary">🔍 Procesar Imagen</button>
             </section>
 
             <!-- Pantalla 3: Cargando -->
@@ -59,10 +47,10 @@
                 <p class="hint">Corrige solo si es necesario. Toca el campo y edita.</p>
                 <div id="verify-container"></div>
                 <button id="confirm-verify-btn" class="btn-primary">✅ Confirmar y Generar Códigos</button>
-                <button id="cancel-verify-btn" class="btn-secondary">🔄 Empezar de nuevo</button>
+                <button id="cancel-verify-btn" class="btn-secondary">🔄 Cancelar</button>
             </section>
 
-            <!-- Pantalla 5: Entrada Manual (Último recurso) -->
+            <!-- Pantalla 5: Entrada Manual -->
             <section id="manual-section" class="manual-section hidden">
                 <h2>Introducir manualmente</h2>
                 <p class="hint">No se detectaron datos. Introdúcelos aquí:</p>
@@ -84,11 +72,11 @@
                 <button id="generate-manual-btn" class="btn-primary">Generar Códigos</button>
             </section>
 
-            <!-- Pantalla 6: Resultados -->
+            <!-- Pantalla 6: Resultados (Se muestra si hay datos guardados o nuevos) -->
             <section id="results-section" class="results-section hidden">
                 <h2>Códigos Generados</h2>
                 <div id="barcodes-container"></div>
-                <button id="new-scan-btn" class="btn-primary">🔄 Nueva Imagen</button>
+                <button id="clear-data-btn" class="btn-secondary">🗑️ Borrar datos guardados</button>
             </section>
 
             <!-- Pantalla 7: Error -->
@@ -108,6 +96,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
-    <script src="app.js?v=6"></script>
+    <script src="app.js?v=7"></script>
 </body>
 </html>

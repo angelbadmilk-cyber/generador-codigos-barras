@@ -1,5 +1,5 @@
 // ===== CONFIGURACIÓN =====
-const OCR_SPACE_API_KEY = 'K87772587088957'; // <-- MANTÉN AQUÍ TU CLAVE DE OCR.SPACE
+const OCR_SPACE_API_KEY = 'K87772587088957'; // <-- MANTÉN AQUÍ TU CLAVE
 
 // ===== ELEMENTOS DEL DOM =====
 const themeToggle = document.getElementById('theme-toggle');
@@ -21,7 +21,7 @@ const manualSection = document.getElementById('manual-section');
 const generateManualBtn = document.getElementById('generate-manual-btn');
 const resultsSection = document.getElementById('results-section');
 const barcodesContainer = document.getElementById('barcodes-container');
-const newScanBtn = document.getElementById('new-scan-btn');
+const clearDataBtn = document.getElementById('clear-data-btn');
 const errorSection = document.getElementById('error-section');
 const errorText = document.getElementById('error-text');
 const retryBtn = document.getElementById('retry-btn');
@@ -42,13 +42,6 @@ function initTheme() {
     }
 }
 
-themeToggle.addEventListener('click', () => {
-    document.body.classList.toggle('dark-mode');
-    const isDark = document.body.classList.contains('dark-mode');
-    themeIcon.textContent = isDark ? '☀️' : '🌙';
-    localStorage.setItem('theme', isDark ? 'dark' : 'light');
-});
-
 // ===== GESTIÓN DE SECCIONES =====
 function showSection(section) {
     const sections = [previewSection, loadingSection, verifySection, manualSection, resultsSection, errorSection];
@@ -62,8 +55,15 @@ function showError(message) {
 }
 
 // ===== CÁMARA Y GALERÍA =====
-cameraBtn.addEventListener('click', () => cameraInput.click());
-galleryBtn.addEventListener('click', () => galleryInput.click());
+cameraBtn.addEventListener('click', () => {
+    clearSavedData(); // Borra datos antiguos al empezar proceso nuevo
+    cameraInput.click();
+});
+
+galleryBtn.addEventListener('click', () => {
+    clearSavedData(); // Borra datos antiguos al empezar proceso nuevo
+    galleryInput.click();
+});
 
 function handleImageSelect(e) {
     const file = e.target.files[0];
@@ -127,25 +127,15 @@ async function callOcrSpace(imageDataUrl) {
 
     const response = await fetch('https://api.ocr.space/parse/image', {
         method: 'POST',
-        headers: {
-            'apikey': OCR_SPACE_API_KEY
-        },
+        headers: { 'apikey': OCR_SPACE_API_KEY },
         body: formData
     });
 
-    if (!response.ok) {
-        throw new Error(`Error HTTP: ${response.status}`);
-    }
-
+    if (!response.ok) throw new Error(`Error HTTP: ${response.status}`);
     const data = await response.json();
     
-    if (data.IsErroredOnProcessing) {
-        throw new Error(data.ErrorMessage || 'Error en el procesamiento');
-    }
-
-    if (data.ParsedResults && data.ParsedResults.length > 0) {
-        return data.ParsedResults[0].ParsedText;
-    }
+    if (data.IsErroredOnProcessing) throw new Error(data.ErrorMessage || 'Error en el procesamiento');
+    if (data.ParsedResults && data.ParsedResults.length > 0) return data.ParsedResults[0].ParsedText;
     
     throw new Error('No se encontró texto en la imagen');
 }
@@ -173,7 +163,6 @@ async function processWithTesseract() {
         showSection(manualSection);
         return;
     }
-    
     showVerificationScreen();
 }
 
@@ -203,9 +192,7 @@ confirmVerifyBtn.addEventListener('click', async () => {
     rows.forEach(row => {
         const num = row.querySelector('.alb-input').value.trim();
         const fecha = row.querySelector('.fecha-input').value.trim();
-        if (num && fecha) {
-            finalAlbaranes.push({ numero: num, fecha: fecha });
-        }
+        if (num && fecha) finalAlbaranes.push({ numero: num, fecha: fecha });
     });
     
     if (finalAlbaranes.length === 0) {
@@ -217,6 +204,7 @@ confirmVerifyBtn.addEventListener('click', async () => {
         loadingStatus.textContent = 'Generando códigos...';
         showSection(loadingSection);
         await generateBarcodes(finalAlbaranes);
+        saveDataLocally(finalAlbaranes); // GUARDAR EN LOCAL
         showSection(resultsSection);
     } catch (error) {
         showError('Error al generar: ' + (error?.message || 'Error desconocido'));
@@ -235,7 +223,6 @@ function extractAlbaranes(text) {
     
     const albaranPattern = /008\d{6,8}/g;
     const datePattern = /(\d{1,2}[.\-/]\d{1,2}[.\-/]\d{2,4}\s+\d{1,2}:\d{2}(?::\d{2})?)/g;
-    const clientPattern = /VALENCIA\s+MODULOS\s+DE\s+PUERTA/i;
     
     const fullText = text.replace(/[\n\r]+/g, ' ');
     const allAlbaranes = [...fullText.matchAll(new RegExp(albaranPattern.source, 'g'))].map(m => m[0]);
@@ -245,12 +232,8 @@ function extractAlbaranes(text) {
         
         let albaranLineIndex = -1;
         for (let i = 0; i < lines.length; i++) {
-            if (lines[i].includes(albaran)) {
-                albaranLineIndex = i;
-                break;
-            }
+            if (lines[i].includes(albaran)) { albaranLineIndex = i; break; }
         }
-        
         if (albaranLineIndex === -1) continue;
         
         let fechaEncontrada = '';
@@ -259,10 +242,7 @@ function extractAlbaranes(text) {
         
         for (let i = startLine; i <= endLine; i++) {
             const dateMatch = lines[i].match(new RegExp(datePattern.source));
-            if (dateMatch) {
-                fechaEncontrada = dateMatch[1];
-                break;
-            }
+            if (dateMatch) { fechaEncontrada = dateMatch[1]; break; }
         }
         
         if (fechaEncontrada) {
@@ -282,8 +262,10 @@ generateManualBtn.addEventListener('click', async () => {
         if (num && fecha) albaranes.push({ numero: num, fecha: fecha });
     }
     if (albaranes.length === 0) { showError('Introduce al menos un albarán y su fecha.'); return; }
+    
     try {
         await generateBarcodes(albaranes);
+        saveDataLocally(albaranes); // GUARDAR EN LOCAL
         showSection(resultsSection);
     } catch (error) {
         showError('Error al generar: ' + (error?.message || 'Error desconocido'));
@@ -293,8 +275,6 @@ generateManualBtn.addEventListener('click', async () => {
 // ===== GENERAR CÓDIGOS =====
 async function generateBarcodes(albaranes) {
     barcodesContainer.innerHTML = '';
-    
-    // CORRECCIÓN: Ahora pasamos 'Logisticaneo' también como texto para que se muestre la etiqueta
     await createBarcodeCard('Logisticaneo', 'Logisticaneo', 'logisticaneo');
     
     for (let index = 0; index < albaranes.length; index++) {
@@ -339,19 +319,49 @@ function createBarcodeCard(codigo, texto, id) {
     });
 }
 
-// ===== NUEVA IMAGEN =====
-newScanBtn.addEventListener('click', () => {
-    currentImageData = null;
-    barcodesContainer.innerHTML = '';
-    for (let i = 1; i <= 3; i++) {
-        const a = document.getElementById(`manual-alb-${i}`);
-        const f = document.getElementById(`manual-fecha-${i}`);
-        if (a) a.value = ''; if (f) f.value = '';
+// ===== FUNCIONES DE ALMACENAMIENTO LOCAL =====
+function saveDataLocally(albaranes) {
+    try {
+        localStorage.setItem('savedAlbaranes', JSON.stringify(albaranes));
+    } catch (e) {
+        console.error('No se pudo guardar en local:', e);
     }
+}
+
+function loadSavedData() {
+    try {
+        const savedData = localStorage.getItem('savedAlbaranes');
+        if (savedData) {
+            const albaranes = JSON.parse(savedData);
+            if (albaranes && albaranes.length > 0) {
+                generateBarcodes(albaranes);
+                showSection(resultsSection);
+                return true;
+            }
+        }
+    } catch (e) {
+        console.error('Error al cargar datos guardados:', e);
+    }
+    return false;
+}
+
+function clearSavedData() {
+    localStorage.removeItem('savedAlbaranes');
+    barcodesContainer.innerHTML = '';
     showSection(null);
+}
+
+// ===== BOTONES DE LIMPIEZA Y REINTENTO =====
+clearDataBtn.addEventListener('click', () => {
+    if (confirm('¿Estás seguro de que quieres borrar los códigos guardados?')) {
+        clearSavedData();
+    }
 });
 
-retryBtn.addEventListener('click', () => showSection(null));
+retryBtn.addEventListener('click', () => {
+    currentImageData = null;
+    showSection(null);
+});
 
 // ===== SERVICE WORKER =====
 if ('serviceWorker' in navigator) {
@@ -362,4 +372,7 @@ if ('serviceWorker' in navigator) {
     });
 }
 
+// ===== INICIALIZACIÓN =====
 initTheme();
+// Intentar cargar datos guardados al abrir la app. Si no hay, no hace nada y muestra la pantalla de cámara.
+loadSavedData();

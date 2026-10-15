@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#2196f3">
+    <title>Generador de Códigos de Barras</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="styles.css?v=6">
+    <link rel="icon" type="image/png" href="icons/icon-192.png">
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <h1>Códigos de Albarán</h1>
+            <button id="theme-toggle" class="theme-toggle">
+                <span class="theme-icon">🌙</span>
+            </button>
+        </header>
+
+        <main>
+            <!-- Pantalla 1: Inicio -->
+            <section class="camera-section">
+                <button id="camera-btn" class="btn-primary">📷 Tomar Foto</button>
+                <button id="gallery-btn" class="btn-secondary">🖼️ Subir desde Galería</button>
+                <div style="margin: 15px 0; text-align: center; color: var(--text-secondary); font-size: 0.9rem;">— O si copiaste el texto de la imagen —</div>
+                <button id="paste-btn" class="btn-secondary">📋 Pegar texto copiado del móvil</button>
+                
+                <input type="file" id="camera-input" accept="image/*" capture="environment" style="display: none;">
+                <input type="file" id="gallery-input" accept="image/*" style="display: none;">
+            </section>
+
+            <!-- Pantalla 1b: Pegar Texto -->
+            <section id="paste-section" class="paste-section hidden">
+                <h2>Pega el texto aquí</h2>
+                <p class="hint">Copia el texto desde la foto en tu galería y pégalo en este cuadro:</p>
+                <textarea id="paste-textarea" rows="6" placeholder="Pega aquí el texto de la tabla..."></textarea>
+                <button id="process-paste-btn" class="btn-primary">🔍 Procesar Texto Pegado</button>
+                <button id="cancel-paste-btn" class="btn-secondary">Volver</button>
+            </section>
+
+            <!-- Pantalla 2: Vista Previa -->
+            <section id="preview-section" class="preview-section hidden">
+                <h2>Imagen cargada</h2>
+                <img id="preview-image" alt="Vista previa">
+                <button id="process-btn" class="btn-primary">🔍 Procesar Imagen (Local)</button>
+            </section>
+
+            <!-- Pantalla 3: Cargando -->
+            <section id="loading-section" class="loading-section hidden">
+                <div class="spinner"></div>
+                <p>Procesando...</p>
+                <p class="loading-status" id="loading-status">Leyendo texto...</p>
+            </section>
+
+            <!-- Pantalla 4: Verificación -->
+            <section id="verify-section" class="verify-section hidden">
+                <h2>Verifica los datos</h2>
+                <p class="hint">Corrige solo si es necesario. Toca el campo y edita.</p>
+                <div id="verify-container"></div>
+                <button id="confirm-verify-btn" class="btn-primary">✅ Confirmar y Generar Códigos</button>
+                <button id="cancel-verify-btn" class="btn-secondary">🔄 Empezar de nuevo</button>
+            </section>
+
+            <!-- Pantalla 5: Entrada Manual (Último recurso) -->
+            <section id="manual-section" class="manual-section hidden">
+                <h2>Introducir manualmente</h2>
+                <p class="hint">No se detectaron datos. Introdúcelos aquí:</p>
+                <div class="manual-input-group">
+                    <label>Albarán 1</label>
+                    <input type="text" id="manual-alb-1" placeholder="Ej: 0082263334">
+                    <input type="text" id="manual-fecha-1" placeholder="Ej: 14.10.2026 13:00:00">
+                </div>
+                <div class="manual-input-group">
+                    <label>Albarán 2</label>
+                    <input type="text" id="manual-alb-2" placeholder="Ej: 0082263336">
+                    <input type="text" id="manual-fecha-2" placeholder="Ej: 14.10.2026 17:00:00">
+                </div>
+                <div class="manual-input-group">
+                    <label>Albarán 3</label>
+                    <input type="text" id="manual-alb-3" placeholder="Ej: 0082263337">
+                    <input type="text" id="manual-fecha-3" placeholder="Ej: 14.10.2026 21:00:00">
+                </div>
+                <button id="generate-manual-btn" class="btn-primary">Generar Códigos</button>
+            </section>
+
+            <!-- Pantalla 6: Resultados -->
+            <section id="results-section" class="results-section hidden">
+                <h2>Códigos Generados</h2>
+                <div id="barcodes-container"></div>
+                <button id="new-scan-btn" class="btn-primary">🔄 Nueva Imagen</button>
+            </section>
+
+            <!-- Pantalla 7: Error -->
+            <section id="error-section" class="error-section hidden">
+                <div class="error-message">
+                    <span class="error-icon">⚠️</span>
+                    <p id="error-text">Ha ocurrido un error</p>
+                </div>
+                <button id="retry-btn" class="btn-secondary">Reintentar</button>
+            </section>
+        </main>
+
+        <footer>
+            <p>100% Offline y Privado</p>
+        </footer>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+    <script src="app.js?v=6"></script>
+</body>
+</html>

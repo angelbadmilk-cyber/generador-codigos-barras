@@ -98,7 +98,7 @@ async function validateApiKey() {
         });
         
         if (response.status === 401 || response.status === 403) {
-            apiWarningText.textContent = '️ La clave de OCR es inválida. Revisa tu API key en app.js.';
+            apiWarningText.textContent = '⚠️ La clave de OCR es inválida. Revisa tu API key en app.js.';
             showSection(apiWarningSection);
             return false;
         }
@@ -236,7 +236,7 @@ cancelCropBtn.addEventListener('click', () => {
     showSection(previewSection);
 });
 
-// ===== PREPROCESAMIENTO AVANZADO DE IMAGEN =====
+// ===== PREPROCESAMIENTO SEGURO (SIN FILTROS DESTRUCTIVOS) =====
 async function preprocessImage(imageDataUrl) {
     return new Promise((resolve) => {
         const img = new Image();
@@ -244,195 +244,39 @@ async function preprocessImage(imageDataUrl) {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
             
-            // Escalar la imagen si es pequeña
-            const minDimension = 1000;
+            // 1. Escalar la imagen si es pequeña (Las IAs leen mejor imágenes grandes)
+            const minWidth = 1500;
             let scale = 1;
-            if (img.width < minDimension || img.height < minDimension) {
-                scale = Math.max(minDimension / img.width, minDimension / img.height);
+            if (img.width < minWidth) {
+                scale = minWidth / img.width;
             }
             
             canvas.width = img.width * scale;
             canvas.height = img.height * scale;
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
             
+            // 2. Aplicar un ligero filtro de contraste nativo (No rompe el texto)
+            ctx.filter = 'contrast(1.2) brightness(1.05)';
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            ctx.filter = 'none'; // Resetear filtro
+            
+            // 3. Convertir a escala de grises suave (Mantiene el anti-aliasing, crucial para OCR)
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const data = imageData.data;
-            const width = canvas.width;
-            const height = canvas.height;
             
-            // 1. Convertir a escala de grises
-            const gray = new Uint8Array(width * height);
-            for (let i = 0, j = 0; i < data.length; i += 4, j++) {
-                gray[j] = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+            for (let i = 0; i < data.length; i += 4) {
+                const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+                data[i] = gray;     // R
+                data[i + 1] = gray; // G
+                data[i + 2] = gray; // B
+                // Alpha se deja igual
             }
             
-            // 2. Filtro de mediana 3x3 (elimina ruido de pantalla)
-            const medianFiltered = new Uint8Array(width * height);
-            for (let y = 1; y < height - 1; y++) {
-                for (let x = 1; x < width - 1; x++) {
-                    const neighbors = [
-                        gray[(y-1) * width + (x-1)],
-                        gray[(y-1) * width + x],
-                        gray[(y-1) * width + (x+1)],
-                        gray[y * width + (x-1)],
-                        gray[y * width + x],
-                        gray[y * width + (x+1)],
-                        gray[(y+1) * width + (x-1)],
-                        gray[(y+1) * width + x],
-                        gray[(y+1) * width + (x+1)]
-                    ];
-                    neighbors.sort((a, b) => a - b);
-                    medianFiltered[y * width + x] = neighbors[4]; // Valor mediano
-                }
-            }
-            
-            // 3. CLAHE simplificado (contraste adaptativo por zonas)
-            const tileSize = 64;
-            const tilesX = Math.ceil(width / tileSize);
-            const tilesY = Math.ceil(height / tileSize);
-            const claheImage = new Uint8Array(width * height);
-            
-            for (let ty = 0; ty < tilesY; ty++) {
-                for (let tx = 0; tx < tilesX; tx++) {
-                    const startX = tx * tileSize;
-                    const startY = ty * tileSize;
-                    const endX = Math.min(startX + tileSize, width);
-                    const endY = Math.min(startY + tileSize, height);
-                    
-                    // Calcular histograma del tile
-                    const histogram = new Array(256).fill(0);
-                    let pixelCount = 0;
-                    for (let y = startY; y < endY; y++) {
-                        for (let x = startX; x < endX; x++) {
-                            histogram[medianFiltered[y * width + x]]++;
-                            pixelCount++;
-                        }
-                    }
-                    
-                    // Ecualización del histograma
-                    const cdf = new Array(256).fill(0);
-                    cdf[0] = histogram[0];
-                    for (let i = 1; i < 256; i++) {
-                        cdf[i] = cdf[i-1] + histogram[i];
-                    }
-                    
-                    const cdfMin = cdf.find(v => v > 0) || 0;
-                    const scale = 255 / (pixelCount - cdfMin);
-                    
-                    // Aplicar ecualización
-                    for (let y = startY; y < endY; y++) {
-                        for (let x = startX; x < endX; x++) {
-                            const idx = y * width + x;
-                            const val = medianFiltered[idx];
-                            claheImage[idx] = Math.min(255, Math.max(0, Math.round((cdf[val] - cdfMin) * scale)));
-                        }
-                    }
-                }
-            }
-            
-            // 4. Detectar y corregir inclinación (Deskew)
-            let skewAngle = 0;
-            const projectionAngles = [-3, -2, -1, 0, 1, 2, 3]; // Ángulos a probar
-            let bestVariance = 0;
-            let bestAngle = 0;
-            
-            for (const angle of projectionAngles) {
-                const rotated = rotateImage(claheImage, width, height, angle);
-                const projection = new Array(rotated.height).fill(0);
-                
-                for (let y = 0; y < rotated.height; y++) {
-                    for (let x = 0; x < rotated.width; x++) {
-                        projection[y] += rotated.data[y * rotated.width + x];
-                    }
-                }
-                
-                // Calcular varianza de la proyección
-                const mean = projection.reduce((a, b) => a + b, 0) / projection.length;
-                const variance = projection.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0);
-                
-                if (variance > bestVariance) {
-                    bestVariance = variance;
-                    bestAngle = angle;
-                }
-            }
-            
-            skewAngle = bestAngle;
-            
-            // Aplicar rotación si es necesario
-            let finalImage = claheImage;
-            let finalWidth = width;
-            let finalHeight = height;
-            
-            if (skewAngle !== 0) {
-                const rotated = rotateImage(claheImage, width, height, skewAngle);
-                finalImage = rotated.data;
-                finalWidth = rotated.width;
-                finalHeight = rotated.height;
-            }
-            
-            // 5. Aplicar umbral adaptativo (binarización suave)
-            const threshold = 128;
-            for (let i = 0; i < finalImage.length; i++) {
-                finalImage[i] = finalImage[i] > threshold ? 255 : 0;
-            }
-            
-            // Crear canvas final
-            const finalCanvas = document.createElement('canvas');
-            finalCanvas.width = finalWidth;
-            finalCanvas.height = finalHeight;
-            const finalCtx = finalCanvas.getContext('2d');
-            const finalImageData = finalCtx.createImageData(finalWidth, finalHeight);
-            
-            for (let i = 0, j = 0; i < finalImageData.data.length; i += 4, j++) {
-                finalImageData.data[i] = finalImage[j];
-                finalImageData.data[i + 1] = finalImage[j];
-                finalImageData.data[i + 2] = finalImage[j];
-                finalImageData.data[i + 3] = 255;
-            }
-            
-            finalCtx.putImageData(finalImageData, 0, 0);
-            resolve(finalCanvas.toDataURL('image/png'));
+            ctx.putImageData(imageData, 0, 0);
+            resolve(canvas.toDataURL('image/png'));
         };
         img.onerror = () => resolve(imageDataUrl);
         img.src = imageDataUrl;
     });
-}
-
-// ===== FUNCIÓN AUXILIAR: ROTAR IMAGEN =====
-function rotateImage(imageData, width, height, angleDegrees) {
-    const angle = (angleDegrees * Math.PI) / 180;
-    const cos = Math.cos(angle);
-    const sin = Math.sin(angle);
-    
-    // Calcular nuevas dimensiones
-    const newWidth = Math.round(Math.abs(width * cos) + Math.abs(height * sin));
-    const newHeight = Math.round(Math.abs(width * sin) + Math.abs(height * cos));
-    
-    const rotated = new Uint8Array(newWidth * newHeight);
-    const centerX = width / 2;
-    const centerY = height / 2;
-    const newCenterX = newWidth / 2;
-    const newCenterY = newHeight / 2;
-    
-    for (let y = 0; y < newHeight; y++) {
-        for (let x = 0; x < newWidth; x++) {
-            // Coordenadas relativas al centro
-            const dx = x - newCenterX;
-            const dy = y - newCenterY;
-            
-            // Rotación inversa
-            const srcX = Math.round(dx * cos + dy * sin + centerX);
-            const srcY = Math.round(-dx * sin + dy * cos + centerY);
-            
-            if (srcX >= 0 && srcX < width && srcY >= 0 && srcY < height) {
-                rotated[y * newWidth + x] = imageData[srcY * width + srcX];
-            } else {
-                rotated[y * newWidth + x] = 255; // Fondo blanco
-            }
-        }
-    }
-    
-    return { data: rotated, width: newWidth, height: newHeight };
 }
 
 // ===== PROCESAR IMAGEN =====

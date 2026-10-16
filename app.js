@@ -1,5 +1,5 @@
 // ===== CONFIGURACIÓN =====
-const OCR_SPACE_API_KEY = 'TU_API_KEY_DE_OCR_SPACE'; // <-- MANTÉN AQUÍ TU CLAVE
+const OCR_SPACE_API_KEY = 'K87772587088957'; // <-- MANTÉN AQUÍ TU CLAVE
 
 // ===== ELEMENTOS DEL DOM =====
 const themeToggle = document.getElementById('theme-toggle');

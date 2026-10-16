@@ -21,6 +21,8 @@ body {
 
 header { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; margin-bottom: 20px; border-bottom: 2px solid var(--border); }
 header h1 { font-size: 1.4rem; font-weight: 600; }
+.header-controls { display: flex; align-items: center; gap: 12px; }
+.connection-status { font-size: 1.2rem; cursor: help; }
 .theme-toggle { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 50%; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1.3rem; }
 
 main { flex: 1; display: flex; flex-direction: column; gap: 20px; }
@@ -31,6 +33,17 @@ button { font-family: inherit; font-size: 1rem; font-weight: 500; border: none; 
 button:active { transform: scale(0.98); }
 .btn-primary { background: var(--accent); color: white; }
 .btn-secondary { background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border); }
+.btn-secondary.small { padding: 10px 14px; font-size: 0.9rem; min-height: 40px; }
+
+.image-container { width: 100%; margin-bottom: 16px; border-radius: 8px; overflow: hidden; background: var(--bg-secondary); }
+#preview-image, #enhanced-image { width: 100%; max-height: 400px; object-fit: contain; display: block; }
+.image-controls { display: flex; gap: 10px; margin-bottom: 10px; }
+.image-controls button { flex: 1; margin-top: 0; }
+
+.crop-container { width: 100%; max-height: 500px; margin-bottom: 16px; }
+.crop-container img { max-width: 100%; display: block; }
+.crop-controls { display: flex; gap: 10px; }
+.crop-controls button { flex: 1; margin-top: 0; }
 
 #preview-image { width: 100%; max-height: 300px; object-fit: contain; border-radius: 8px; background: var(--bg-secondary); margin-bottom: 16px; }
 .loading-section { text-align: center; }
@@ -60,23 +73,8 @@ button:active { transform: scale(0.98); }
 .error-icon { font-size: 1.5rem; }
 .error-message p { color: var(--error); font-size: 0.95rem; }
 
+.api-warning-section .error-message { background: rgba(255, 152, 0, 0.1); border-color: #ff9800; }
+.api-warning-section .error-message p { color: #ff9800; }
+
 footer { text-align: center; padding: 20px 0 10px; color: var(--text-secondary); font-size: 0.85rem; margin-top: auto; }
 .hidden { display: none !important; }
-/* Estilos para la sección de pegar texto */
-.paste-section textarea {
-    width: 100%;
-    padding: 12px;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    background: var(--bg-primary);
-    color: var(--text-primary);
-    font-family: 'Courier New', monospace;
-    font-size: 0.9rem;
-    min-height: 120px;
-    margin-bottom: 16px;
-    resize: vertical;
-}
-.paste-section textarea:focus {
-    outline: none;
-    border-color: var(--accent);
-}

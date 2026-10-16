@@ -6,16 +6,21 @@
     <meta name="theme-color" content="#2196f3">
     <title>Generador de Códigos de Barras</title>
     <link rel="manifest" href="manifest.json">
-    <link rel="stylesheet" href="styles.css?v=8">
+    <link rel="stylesheet" href="styles.css?v=9">
     <link rel="icon" type="image/png" href="icons/icon-192.png">
+    <!-- Cropper.js para recortar imágenes -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
 </head>
 <body>
     <div class="app-container">
         <header>
             <h1>Códigos de Albarán</h1>
-            <button id="theme-toggle" class="theme-toggle">
-                <span class="theme-icon">🌙</span>
-            </button>
+            <div class="header-controls">
+                <span id="connection-status" class="connection-status" title="Estado de conexión">🟢</span>
+                <button id="theme-toggle" class="theme-toggle">
+                    <span class="theme-icon">🌙</span>
+                </button>
+            </div>
         </header>
 
         <main>
@@ -27,11 +32,30 @@
                 <input type="file" id="gallery-input" accept="image/*" style="display: none;">
             </section>
 
-            <!-- Pantalla 2: Vista Previa -->
+            <!-- Pantalla 2: Vista Previa con controles -->
             <section id="preview-section" class="preview-section hidden">
                 <h2>Imagen cargada</h2>
-                <img id="preview-image" alt="Vista previa">
-                <button id="process-btn" class="btn-primary"> Procesar Imagen (Mejorada)</button>
+                <div class="image-container">
+                    <img id="preview-image" alt="Vista previa">
+                </div>
+                <div class="image-controls">
+                    <button id="rotate-btn" class="btn-secondary small">🔄 Rotar 90°</button>
+                    <button id="crop-btn" class="btn-secondary small">️ Recortar</button>
+                </div>
+                <button id="process-btn" class="btn-primary">🔍 Procesar Imagen</button>
+            </section>
+
+            <!-- Pantalla 2b: Modo Recorte -->
+            <section id="crop-section" class="crop-section hidden">
+                <h2>Recortar imagen</h2>
+                <p class="hint">Ajusta el recuadro para seleccionar solo la tabla</p>
+                <div class="crop-container">
+                    <img id="crop-image" alt="Imagen a recortar">
+                </div>
+                <div class="crop-controls">
+                    <button id="confirm-crop-btn" class="btn-primary">✅ Aplicar recorte</button>
+                    <button id="cancel-crop-btn" class="btn-secondary">❌ Cancelar</button>
+                </div>
             </section>
 
             <!-- Pantalla 3: Cargando -->
@@ -39,6 +63,17 @@
                 <div class="spinner"></div>
                 <p>Procesando...</p>
                 <p class="loading-status" id="loading-status">Mejorando calidad de imagen...</p>
+            </section>
+
+            <!-- Pantalla 3b: Confirmar imagen mejorada -->
+            <section id="enhanced-preview-section" class="enhanced-preview-section hidden">
+                <h2>Imagen mejorada</h2>
+                <p class="hint">Así verá la IA tu imagen. ¿Se lee bien?</p>
+                <div class="image-container">
+                    <img id="enhanced-image" alt="Imagen mejorada">
+                </div>
+                <button id="confirm-enhanced-btn" class="btn-primary">✅ Sí, procesar</button>
+                <button id="cancel-enhanced-btn" class="btn-secondary">🔄 Usar imagen original</button>
             </section>
 
             <!-- Pantalla 4: Verificación -->
@@ -87,6 +122,15 @@
                 </div>
                 <button id="retry-btn" class="btn-secondary">Reintentar</button>
             </section>
+
+            <!-- Pantalla 8: Aviso API Key -->
+            <section id="api-warning-section" class="api-warning-section hidden">
+                <div class="error-message">
+                    <span class="error-icon">🔑</span>
+                    <p id="api-warning-text">La clave de OCR no está configurada correctamente</p>
+                </div>
+                <button id="dismiss-api-warning" class="btn-secondary">Entendido</button>
+            </section>
         </main>
 
         <footer>
@@ -94,8 +138,9 @@
         </footer>
     </div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
-    <script src="app.js?v=8"></script>
+    <script src="app.js?v=9"></script>
 </body>
 </html>

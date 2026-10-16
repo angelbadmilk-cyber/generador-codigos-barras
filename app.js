@@ -1,18 +1,30 @@
 // ===== CONFIGURACIÓN =====
-const OCR_SPACE_API_KEY = 'K87772587088957'; // <-- MANTÉN AQUÍ TU CLAVE
+const OCR_SPACE_API_KEY = 'K87772587088957'; // <-- PEGA AQUÍ TU CLAVE REAL
+const MAX_RETRIES = 2; // Número de reintentos si OCR.space falla
 
 // ===== ELEMENTOS DEL DOM =====
 const themeToggle = document.getElementById('theme-toggle');
 const themeIcon = document.querySelector('.theme-icon');
+const connectionStatus = document.getElementById('connection-status');
 const cameraBtn = document.getElementById('camera-btn');
 const galleryBtn = document.getElementById('gallery-btn');
 const cameraInput = document.getElementById('camera-input');
 const galleryInput = document.getElementById('gallery-input');
 const previewSection = document.getElementById('preview-section');
 const previewImage = document.getElementById('preview-image');
+const rotateBtn = document.getElementById('rotate-btn');
+const cropBtn = document.getElementById('crop-btn');
 const processBtn = document.getElementById('process-btn');
+const cropSection = document.getElementById('crop-section');
+const cropImage = document.getElementById('crop-image');
+const confirmCropBtn = document.getElementById('confirm-crop-btn');
+const cancelCropBtn = document.getElementById('cancel-crop-btn');
 const loadingSection = document.getElementById('loading-section');
 const loadingStatus = document.getElementById('loading-status');
+const enhancedPreviewSection = document.getElementById('enhanced-preview-section');
+const enhancedImage = document.getElementById('enhanced-image');
+const confirmEnhancedBtn = document.getElementById('confirm-enhanced-btn');
+const cancelEnhancedBtn = document.getElementById('cancel-enhanced-btn');
 const verifySection = document.getElementById('verify-section');
 const verifyContainer = document.getElementById('verify-container');
 const confirmVerifyBtn = document.getElementById('confirm-verify-btn');
@@ -25,10 +37,16 @@ const clearDataBtn = document.getElementById('clear-data-btn');
 const errorSection = document.getElementById('error-section');
 const errorText = document.getElementById('error-text');
 const retryBtn = document.getElementById('retry-btn');
+const apiWarningSection = document.getElementById('api-warning-section');
+const apiWarningText = document.getElementById('api-warning-text');
+const dismissApiWarning = document.getElementById('dismiss-api-warning');
 
 let currentImageData = null;
+let enhancedImageData = null;
 let worker = null;
 let detectedAlbaranes = [];
+let cropper = null;
+let currentRotation = 0;
 
 // ===== TEMA =====
 function initTheme() {
@@ -42,9 +60,51 @@ function initTheme() {
     }
 }
 
+// ===== INDICADOR DE CONEXIÓN =====
+function updateConnectionStatus() {
+    if (navigator.onLine) {
+        connectionStatus.textContent = '🟢';
+        connectionStatus.title = 'Conectado - Usará IA';
+    } else {
+        connectionStatus.textContent = '🔴';
+        connectionStatus.title = 'Sin conexión - Modo local';
+    }
+}
+
+window.addEventListener('online', updateConnectionStatus);
+window.addEventListener('offline', updateConnectionStatus);
+
+// ===== VALIDACIÓN API KEY =====
+async function validateApiKey() {
+    if (!OCR_SPACE_API_KEY || OCR_SPACE_API_KEY === 'TU_API_KEY_DE_OCR_SPACE') {
+        apiWarningText.textContent = '️ La clave de OCR no está configurada. Edita el archivo app.js y añade tu API key.';
+        showSection(apiWarningSection);
+        return false;
+    }
+    
+    try {
+        const response = await fetch('https://api.ocr.space/parse/image', {
+            method: 'POST',
+            headers: { 'apikey': OCR_SPACE_API_KEY },
+            body: new FormData()
+        });
+        
+        if (response.status === 401 || response.status === 403) {
+            apiWarningText.textContent = '⚠️ La clave de OCR es inválida. Revisa tu API key en app.js.';
+            showSection(apiWarningSection);
+            return false;
+        }
+        
+        return true;
+    } catch (error) {
+        console.warn('No se pudo validar la API key:', error);
+        return true; // Asumimos que está bien si no podemos comprobarlo
+    }
+}
+
 // ===== GESTIÓN DE SECCIONES =====
 function showSection(section) {
-    const sections = [previewSection, loadingSection, verifySection, manualSection, resultsSection, errorSection];
+    const sections = [previewSection, cropSection, loadingSection, enhancedPreviewSection, verifySection, manualSection, resultsSection, errorSection, apiWarningSection];
     sections.forEach(s => s.classList.add('hidden'));
     if (section) section.classList.remove('hidden');
 }
@@ -56,13 +116,28 @@ function showError(message) {
 
 // ===== CÁMARA Y GALERÍA =====
 cameraBtn.addEventListener('click', () => {
-    clearSavedData();
-    cameraInput.click();
+    // MEJORA J: Preguntar antes de borrar
+    const savedData = localStorage.getItem('savedAlbaranes');
+    if (savedData) {
+        if (confirm('¿Borrar los códigos actuales y empezar uno nuevo?')) {
+            clearSavedData();
+            cameraInput.click();
+        }
+    } else {
+        cameraInput.click();
+    }
 });
 
 galleryBtn.addEventListener('click', () => {
-    clearSavedData();
-    galleryInput.click();
+    const savedData = localStorage.getItem('savedAlbaranes');
+    if (savedData) {
+        if (confirm('¿Borrar los códigos actuales y empezar uno nuevo?')) {
+            clearSavedData();
+            galleryInput.click();
+        }
+    } else {
+        galleryInput.click();
+    }
 });
 
 function handleImageSelect(e) {
@@ -72,6 +147,7 @@ function handleImageSelect(e) {
     reader.onload = (event) => {
         currentImageData = event.target.result;
         previewImage.src = currentImageData;
+        currentRotation = 0;
         showSection(previewSection);
     };
     reader.readAsDataURL(file);
@@ -81,7 +157,79 @@ function handleImageSelect(e) {
 cameraInput.addEventListener('change', handleImageSelect);
 galleryInput.addEventListener('change', handleImageSelect);
 
-// ===== PREPROCESAMIENTO AVANZADO DE IMAGEN =====
+// ===== ROTAR IMAGEN (MEJORA D) =====
+rotateBtn.addEventListener('click', () => {
+    if (!currentImageData) return;
+    
+    currentRotation = (currentRotation + 90) % 360;
+    
+    const img = new Image();
+    img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        if (currentRotation === 90 || currentRotation === 270) {
+            canvas.width = img.height;
+            canvas.height = img.width;
+        } else {
+            canvas.width = img.width;
+            canvas.height = img.height;
+        }
+        
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.rotate((currentRotation * Math.PI) / 180);
+        ctx.drawImage(img, -img.width / 2, -img.height / 2);
+        
+        currentImageData = canvas.toDataURL('image/png');
+        previewImage.src = currentImageData;
+    };
+    img.src = currentImageData;
+});
+
+// ===== RECORTAR IMAGEN (MEJORA E) =====
+cropBtn.addEventListener('click', () => {
+    if (!currentImageData) return;
+    
+    cropImage.src = currentImageData;
+    showSection(cropSection);
+    
+    setTimeout(() => {
+        if (cropper) cropper.destroy();
+        cropper = new Cropper(cropImage, {
+            viewMode: 1,
+            dragMode: 'move',
+            autoCropArea: 0.8,
+            restore: false,
+            guides: true,
+            center: true,
+            highlight: false,
+            cropBoxMovable: true,
+            cropBoxResizable: true,
+            toggleDragModeOnDblclick: false,
+        });
+    }, 100);
+});
+
+confirmCropBtn.addEventListener('click', () => {
+    if (cropper) {
+        const canvas = cropper.getCroppedCanvas();
+        currentImageData = canvas.toDataURL('image/png');
+        previewImage.src = currentImageData;
+        cropper.destroy();
+        cropper = null;
+        showSection(previewSection);
+    }
+});
+
+cancelCropBtn.addEventListener('click', () => {
+    if (cropper) {
+        cropper.destroy();
+        cropper = null;
+    }
+    showSection(previewSection);
+});
+
+// ===== PREPROCESAMIENTO DE IMAGEN =====
 async function preprocessImage(imageDataUrl) {
     return new Promise((resolve) => {
         const img = new Image();
@@ -89,7 +237,6 @@ async function preprocessImage(imageDataUrl) {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
             
-            // Escalar la imagen si es pequeña (mejora OCR)
             const minDimension = 1000;
             let scale = 1;
             if (img.width < minDimension || img.height < minDimension) {
@@ -98,17 +245,13 @@ async function preprocessImage(imageDataUrl) {
             
             canvas.width = img.width * scale;
             canvas.height = img.height * scale;
-            
-            // Dibujar imagen escalada
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
             
-            // Obtener datos de píxeles
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const data = imageData.data;
             const width = canvas.width;
             const height = canvas.height;
             
-            // 1. Convertir a escala de grises y aumentar contraste
             const gray = new Uint8Array(width * height);
             let minVal = 255, maxVal = 0;
             
@@ -119,11 +262,9 @@ async function preprocessImage(imageDataUrl) {
                 if (grayVal > maxVal) maxVal = grayVal;
             }
             
-            // 2. Estirar contraste (normalización)
             const contrastRange = maxVal - minVal;
             for (let i = 0, j = 0; i < data.length; i += 4, j++) {
                 let normalized = contrastRange > 0 ? ((gray[j] - minVal) / contrastRange) * 255 : 128;
-                // Aumentar contraste adicional (factor 1.5)
                 normalized = 128 + (normalized - 128) * 1.5;
                 normalized = Math.max(0, Math.min(255, normalized));
                 
@@ -132,7 +273,6 @@ async function preprocessImage(imageDataUrl) {
                 data[i + 2] = normalized;
             }
             
-            // 3. Aplicar filtro de nitidez (unsharp mask simple)
             const sharpened = new Uint8Array(width * height);
             for (let y = 1; y < height - 1; y++) {
                 for (let x = 1; x < width - 1; x++) {
@@ -149,7 +289,6 @@ async function preprocessImage(imageDataUrl) {
                 }
             }
             
-            // Aplicar sharpened a los píxeles
             for (let i = 0, j = 0; i < data.length; i += 4, j++) {
                 if (j >= width && j < (height - 1) * width && j % width > 0 && j % width < width - 1) {
                     data[i] = sharpened[j];
@@ -158,7 +297,6 @@ async function preprocessImage(imageDataUrl) {
                 }
             }
             
-            // 4. Binarización adaptativa (umbral de Otsu simplificado)
             const histogram = new Array(256).fill(0);
             for (let i = 0; i < gray.length; i++) histogram[gray[i]]++;
             
@@ -182,7 +320,6 @@ async function preprocessImage(imageDataUrl) {
                 }
             }
             
-            // Aplicar umbral
             for (let i = 0, j = 0; i < data.length; i += 4, j++) {
                 const final = gray[j] > threshold ? 255 : 0;
                 data[i] = final;
@@ -205,27 +342,57 @@ processBtn.addEventListener('click', async () => {
     
     try {
         loadingStatus.textContent = 'Mejorando calidad de imagen...';
-        const enhancedImage = await preprocessImage(currentImageData);
+        enhancedImageData = await preprocessImage(currentImageData);
         
-        loadingStatus.textContent = 'Leyendo con IA (OCR.space)...';
-        let text = await callOcrSpace(enhancedImage);
-        
-        if (!text || text.trim().length < 10) {
-            throw new Error('No se detectó texto válido');
-        }
-        
-        loadingStatus.textContent = 'Analizando datos...';
-        detectedAlbaranes = extractAlbaranes(text);
-        
-        if (detectedAlbaranes.length === 0) {
-            showSection(manualSection);
-            return;
-        }
-        
-        showVerificationScreen();
+        // MEJORA F: Mostrar imagen mejorada para confirmar
+        enhancedImage.src = enhancedImageData;
+        showSection(enhancedPreviewSection);
         
     } catch (error) {
-        console.warn('OCR.space falló, usando respaldo local:', error.message);
+        console.error('Error preprocesando:', error);
+        enhancedImageData = currentImageData;
+        await processWithOCR();
+    }
+});
+
+// Confirmar imagen mejorada
+confirmEnhancedBtn.addEventListener('click', async () => {
+    await processWithOCR();
+});
+
+// Usar imagen original
+cancelEnhancedBtn.addEventListener('click', async () => {
+    enhancedImageData = currentImageData;
+    await processWithOCR();
+});
+
+// ===== PROCESAR CON OCR (CON REINTENTOS - MEJORA C) =====
+async function processWithOCR() {
+    showSection(loadingSection);
+    loadingStatus.textContent = 'Leyendo con IA (OCR.space)...';
+    
+    let text = null;
+    let lastError = null;
+    
+    // MEJORA C: Reintentos automáticos
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        try {
+            if (attempt > 1) {
+                loadingStatus.textContent = `Reintento ${attempt}/${MAX_RETRIES}...`;
+                await new Promise(resolve => setTimeout(resolve, 1000)); // Esperar 1 segundo
+            }
+            
+            text = await callOcrSpace(enhancedImageData);
+            break; // Si funciona, salimos del bucle
+            
+        } catch (error) {
+            lastError = error;
+            console.warn(`Intento ${attempt} falló:`, error.message);
+        }
+    }
+    
+    if (!text || text.trim().length < 10) {
+        console.warn('OCR.space falló, usando respaldo local:', lastError?.message);
         loadingStatus.textContent = 'Modo sin conexión: Leyendo localmente...';
         
         try {
@@ -233,8 +400,19 @@ processBtn.addEventListener('click', async () => {
         } catch (tesseractError) {
             showError('No se pudo leer la imagen. Prueba a acercarte más o usa la entrada manual.');
         }
+        return;
     }
-});
+    
+    loadingStatus.textContent = 'Analizando datos...';
+    detectedAlbaranes = extractAlbaranes(text);
+    
+    if (detectedAlbaranes.length === 0) {
+        showSection(manualSection);
+        return;
+    }
+    
+    showVerificationScreen();
+}
 
 // ===== OCR.SPACE API =====
 async function callOcrSpace(imageDataUrl) {
@@ -333,6 +511,7 @@ confirmVerifyBtn.addEventListener('click', async () => {
 
 cancelVerifyBtn.addEventListener('click', () => {
     currentImageData = null;
+    enhancedImageData = null;
     showSection(null);
 });
 
@@ -480,6 +659,11 @@ clearDataBtn.addEventListener('click', () => {
 
 retryBtn.addEventListener('click', () => {
     currentImageData = null;
+    enhancedImageData = null;
+    showSection(null);
+});
+
+dismissApiWarning.addEventListener('click', () => {
     showSection(null);
 });
 
@@ -494,4 +678,6 @@ if ('serviceWorker' in navigator) {
 
 // ===== INICIALIZACIÓN =====
 initTheme();
+updateConnectionStatus();
+validateApiKey();
 loadSavedData();

@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#2196f3">
     <title>Generador de Códigos de Barras</title>
     <link rel="manifest" href="manifest.json">
-    <link rel="stylesheet" href="styles.css?v=7">
+    <link rel="stylesheet" href="styles.css?v=8">
     <link rel="icon" type="image/png" href="icons/icon-192.png">
 </head>
 <body>
@@ -19,7 +19,7 @@
         </header>
 
         <main>
-            <!-- Pantalla 1: Inicio (Siempre visible) -->
+            <!-- Pantalla 1: Inicio -->
             <section class="camera-section">
                 <button id="camera-btn" class="btn-primary">📷 Tomar Nueva Foto</button>
                 <button id="gallery-btn" class="btn-secondary">🖼️ Subir desde Galería</button>
@@ -31,14 +31,14 @@
             <section id="preview-section" class="preview-section hidden">
                 <h2>Imagen cargada</h2>
                 <img id="preview-image" alt="Vista previa">
-                <button id="process-btn" class="btn-primary">🔍 Procesar Imagen</button>
+                <button id="process-btn" class="btn-primary"> Procesar Imagen (Mejorada)</button>
             </section>
 
             <!-- Pantalla 3: Cargando -->
             <section id="loading-section" class="loading-section hidden">
                 <div class="spinner"></div>
                 <p>Procesando...</p>
-                <p class="loading-status" id="loading-status">Leyendo texto...</p>
+                <p class="loading-status" id="loading-status">Mejorando calidad de imagen...</p>
             </section>
 
             <!-- Pantalla 4: Verificación -->
@@ -72,7 +72,7 @@
                 <button id="generate-manual-btn" class="btn-primary">Generar Códigos</button>
             </section>
 
-            <!-- Pantalla 6: Resultados (Se muestra si hay datos guardados o nuevos) -->
+            <!-- Pantalla 6: Resultados -->
             <section id="results-section" class="results-section hidden">
                 <h2>Códigos Generados</h2>
                 <div id="barcodes-container"></div>
@@ -96,6 +96,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
-    <script src="app.js?v=7"></script>
+    <script src="app.js?v=8"></script>
 </body>
 </html>

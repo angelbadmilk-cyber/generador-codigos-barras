@@ -1,5 +1,5 @@
 // ===== CONFIGURACIÓN =====
-const OCR_SPACE_API_KEY = 'K87772587088957'; // <-- MANTÉN AQUÍ TU CLAVE
+const OCR_SPACE_API_KEY = 'TU_API_KEY_DE_OCR_SPACE'; // <-- MANTÉN AQUÍ TU CLAVE
 
 // ===== ELEMENTOS DEL DOM =====
 const themeToggle = document.getElementById('theme-toggle');
@@ -56,12 +56,12 @@ function showError(message) {
 
 // ===== CÁMARA Y GALERÍA =====
 cameraBtn.addEventListener('click', () => {
-    clearSavedData(); // Borra datos antiguos al empezar proceso nuevo
+    clearSavedData();
     cameraInput.click();
 });
 
 galleryBtn.addEventListener('click', () => {
-    clearSavedData(); // Borra datos antiguos al empezar proceso nuevo
+    clearSavedData();
     galleryInput.click();
 });
 
@@ -81,14 +81,134 @@ function handleImageSelect(e) {
 cameraInput.addEventListener('change', handleImageSelect);
 galleryInput.addEventListener('change', handleImageSelect);
 
+// ===== PREPROCESAMIENTO AVANZADO DE IMAGEN =====
+async function preprocessImage(imageDataUrl) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            // Escalar la imagen si es pequeña (mejora OCR)
+            const minDimension = 1000;
+            let scale = 1;
+            if (img.width < minDimension || img.height < minDimension) {
+                scale = Math.max(minDimension / img.width, minDimension / img.height);
+            }
+            
+            canvas.width = img.width * scale;
+            canvas.height = img.height * scale;
+            
+            // Dibujar imagen escalada
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            
+            // Obtener datos de píxeles
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            const width = canvas.width;
+            const height = canvas.height;
+            
+            // 1. Convertir a escala de grises y aumentar contraste
+            const gray = new Uint8Array(width * height);
+            let minVal = 255, maxVal = 0;
+            
+            for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+                const grayVal = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+                gray[j] = grayVal;
+                if (grayVal < minVal) minVal = grayVal;
+                if (grayVal > maxVal) maxVal = grayVal;
+            }
+            
+            // 2. Estirar contraste (normalización)
+            const contrastRange = maxVal - minVal;
+            for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+                let normalized = contrastRange > 0 ? ((gray[j] - minVal) / contrastRange) * 255 : 128;
+                // Aumentar contraste adicional (factor 1.5)
+                normalized = 128 + (normalized - 128) * 1.5;
+                normalized = Math.max(0, Math.min(255, normalized));
+                
+                data[i] = normalized;
+                data[i + 1] = normalized;
+                data[i + 2] = normalized;
+            }
+            
+            // 3. Aplicar filtro de nitidez (unsharp mask simple)
+            const sharpened = new Uint8Array(width * height);
+            for (let y = 1; y < height - 1; y++) {
+                for (let x = 1; x < width - 1; x++) {
+                    const idx = y * width + x;
+                    const center = data[idx * 4];
+                    const neighbors = [
+                        data[((y-1) * width + x) * 4],
+                        data[((y+1) * width + x) * 4],
+                        data[(y * width + x - 1) * 4],
+                        data[(y * width + x + 1) * 4]
+                    ];
+                    const avg = neighbors.reduce((a, b) => a + b, 0) / 4;
+                    sharpened[idx] = Math.max(0, Math.min(255, center + (center - avg) * 0.5));
+                }
+            }
+            
+            // Aplicar sharpened a los píxeles
+            for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+                if (j >= width && j < (height - 1) * width && j % width > 0 && j % width < width - 1) {
+                    data[i] = sharpened[j];
+                    data[i + 1] = sharpened[j];
+                    data[i + 2] = sharpened[j];
+                }
+            }
+            
+            // 4. Binarización adaptativa (umbral de Otsu simplificado)
+            const histogram = new Array(256).fill(0);
+            for (let i = 0; i < gray.length; i++) histogram[gray[i]]++;
+            
+            const total = gray.length;
+            let sum = 0;
+            for (let i = 0; i < 256; i++) sum += i * histogram[i];
+            
+            let sumB = 0, wB = 0, wF = 0, maxVariance = 0, threshold = 128;
+            for (let t = 0; t < 256; t++) {
+                wB += histogram[t];
+                if (wB === 0) continue;
+                wF = total - wB;
+                if (wF === 0) break;
+                sumB += t * histogram[t];
+                const mB = sumB / wB;
+                const mF = (sum - sumB) / wF;
+                const variance = wB * wF * (mB - mF) * (mB - mF);
+                if (variance > maxVariance) {
+                    maxVariance = variance;
+                    threshold = t;
+                }
+            }
+            
+            // Aplicar umbral
+            for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+                const final = gray[j] > threshold ? 255 : 0;
+                data[i] = final;
+                data[i + 1] = final;
+                data[i + 2] = final;
+            }
+            
+            ctx.putImageData(imageData, 0, 0);
+            resolve(canvas.toDataURL('image/png'));
+        };
+        img.onerror = () => resolve(imageDataUrl);
+        img.src = imageDataUrl;
+    });
+}
+
 // ===== PROCESAR IMAGEN =====
 processBtn.addEventListener('click', async () => {
     if (!currentImageData) return;
     showSection(loadingSection);
     
     try {
+        loadingStatus.textContent = 'Mejorando calidad de imagen...';
+        const enhancedImage = await preprocessImage(currentImageData);
+        
         loadingStatus.textContent = 'Leyendo con IA (OCR.space)...';
-        let text = await callOcrSpace(currentImageData);
+        let text = await callOcrSpace(enhancedImage);
         
         if (!text || text.trim().length < 10) {
             throw new Error('No se detectó texto válido');
@@ -204,7 +324,7 @@ confirmVerifyBtn.addEventListener('click', async () => {
         loadingStatus.textContent = 'Generando códigos...';
         showSection(loadingSection);
         await generateBarcodes(finalAlbaranes);
-        saveDataLocally(finalAlbaranes); // GUARDAR EN LOCAL
+        saveDataLocally(finalAlbaranes);
         showSection(resultsSection);
     } catch (error) {
         showError('Error al generar: ' + (error?.message || 'Error desconocido'));
@@ -265,7 +385,7 @@ generateManualBtn.addEventListener('click', async () => {
     
     try {
         await generateBarcodes(albaranes);
-        saveDataLocally(albaranes); // GUARDAR EN LOCAL
+        saveDataLocally(albaranes);
         showSection(resultsSection);
     } catch (error) {
         showError('Error al generar: ' + (error?.message || 'Error desconocido'));
@@ -374,5 +494,4 @@ if ('serviceWorker' in navigator) {
 
 // ===== INICIALIZACIÓN =====
 initTheme();
-// Intentar cargar datos guardados al abrir la app. Si no hay, no hace nada y muestra la pantalla de cámara.
 loadSavedData();

@@ -21,10 +21,6 @@ const confirmCropBtn = document.getElementById('confirm-crop-btn');
 const cancelCropBtn = document.getElementById('cancel-crop-btn');
 const loadingSection = document.getElementById('loading-section');
 const loadingStatus = document.getElementById('loading-status');
-const enhancedPreviewSection = document.getElementById('enhanced-preview-section');
-const enhancedImage = document.getElementById('enhanced-image');
-const confirmEnhancedBtn = document.getElementById('confirm-enhanced-btn');
-const cancelEnhancedBtn = document.getElementById('cancel-enhanced-btn');
 const verifySection = document.getElementById('verify-section');
 const verifyContainer = document.getElementById('verify-container');
 const confirmVerifyBtn = document.getElementById('confirm-verify-btn');
@@ -42,7 +38,6 @@ const apiWarningText = document.getElementById('api-warning-text');
 const dismissApiWarning = document.getElementById('dismiss-api-warning');
 
 let currentImageData = null;
-let enhancedImageData = null;
 let worker = null;
 let detectedAlbaranes = [];
 let cropper = null;
@@ -52,7 +47,6 @@ let currentRotation = 0;
 function initTheme() {
     const savedTheme = localStorage.getItem('theme');
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    
     if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
         document.body.classList.add('dark-mode');
         themeIcon.textContent = '☀️';
@@ -64,7 +58,7 @@ function initTheme() {
 themeToggle.addEventListener('click', () => {
     document.body.classList.toggle('dark-mode');
     const isDark = document.body.classList.contains('dark-mode');
-    themeIcon.textContent = isDark ? '☀️' : '🌙';
+    themeIcon.textContent = isDark ? '️' : '🌙';
     localStorage.setItem('theme', isDark ? 'dark' : 'light');
 });
 
@@ -89,30 +83,12 @@ async function validateApiKey() {
         showSection(apiWarningSection);
         return false;
     }
-    
-    try {
-        const response = await fetch('https://api.ocr.space/parse/image', {
-            method: 'POST',
-            headers: { 'apikey': OCR_SPACE_API_KEY },
-            body: new FormData()
-        });
-        
-        if (response.status === 401 || response.status === 403) {
-            apiWarningText.textContent = '⚠️ La clave de OCR es inválida. Revisa tu API key en app.js.';
-            showSection(apiWarningSection);
-            return false;
-        }
-        
-        return true;
-    } catch (error) {
-        console.warn('No se pudo validar la API key:', error);
-        return true;
-    }
+    return true;
 }
 
 // ===== GESTIÓN DE SECCIONES =====
 function showSection(section) {
-    const sections = [previewSection, cropSection, loadingSection, enhancedPreviewSection, verifySection, manualSection, resultsSection, errorSection, apiWarningSection];
+    const sections = [previewSection, cropSection, loadingSection, verifySection, manualSection, resultsSection, errorSection, apiWarningSection];
     sections.forEach(s => s.classList.add('hidden'));
     if (section) section.classList.remove('hidden');
 }
@@ -167,14 +143,11 @@ galleryInput.addEventListener('change', handleImageSelect);
 // ===== ROTAR IMAGEN =====
 rotateBtn.addEventListener('click', () => {
     if (!currentImageData) return;
-    
     currentRotation = (currentRotation + 90) % 360;
-    
     const img = new Image();
     img.onload = () => {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
-        
         if (currentRotation === 90 || currentRotation === 270) {
             canvas.width = img.height;
             canvas.height = img.width;
@@ -182,11 +155,9 @@ rotateBtn.addEventListener('click', () => {
             canvas.width = img.width;
             canvas.height = img.height;
         }
-        
         ctx.translate(canvas.width / 2, canvas.height / 2);
         ctx.rotate((currentRotation * Math.PI) / 180);
         ctx.drawImage(img, -img.width / 2, -img.height / 2);
-        
         currentImageData = canvas.toDataURL('image/png');
         previewImage.src = currentImageData;
     };
@@ -196,31 +167,20 @@ rotateBtn.addEventListener('click', () => {
 // ===== RECORTAR IMAGEN =====
 cropBtn.addEventListener('click', () => {
     if (!currentImageData) return;
-    
     cropImage.src = currentImageData;
     showSection(cropSection);
-    
     setTimeout(() => {
         if (cropper) cropper.destroy();
         cropper = new Cropper(cropImage, {
-            viewMode: 1,
-            dragMode: 'move',
-            autoCropArea: 0.8,
-            restore: false,
-            guides: true,
-            center: true,
-            highlight: false,
-            cropBoxMovable: true,
-            cropBoxResizable: true,
-            toggleDragModeOnDblclick: false,
+            viewMode: 1, dragMode: 'move', autoCropArea: 0.8,
+            cropBoxMovable: true, cropBoxResizable: true,
         });
     }, 100);
 });
 
 confirmCropBtn.addEventListener('click', () => {
     if (cropper) {
-        const canvas = cropper.getCroppedCanvas();
-        currentImageData = canvas.toDataURL('image/png');
+        currentImageData = cropper.getCroppedCanvas().toDataURL('image/png');
         previewImage.src = currentImageData;
         cropper.destroy();
         cropper = null;
@@ -229,91 +189,20 @@ confirmCropBtn.addEventListener('click', () => {
 });
 
 cancelCropBtn.addEventListener('click', () => {
-    if (cropper) {
-        cropper.destroy();
-        cropper = null;
-    }
+    if (cropper) { cropper.destroy(); cropper = null; }
     showSection(previewSection);
 });
 
-// ===== PREPROCESAMIENTO SEGURO (SIN FILTROS DESTRUCTIVOS) =====
-async function preprocessImage(imageDataUrl) {
-    return new Promise((resolve) => {
-        const img = new Image();
-        img.onload = () => {
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            
-            // 1. Escalar la imagen si es pequeña (Las IAs leen mejor imágenes grandes)
-            const minWidth = 1500;
-            let scale = 1;
-            if (img.width < minWidth) {
-                scale = minWidth / img.width;
-            }
-            
-            canvas.width = img.width * scale;
-            canvas.height = img.height * scale;
-            
-            // 2. Aplicar un ligero filtro de contraste nativo (No rompe el texto)
-            ctx.filter = 'contrast(1.2) brightness(1.05)';
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            ctx.filter = 'none'; // Resetear filtro
-            
-            // 3. Convertir a escala de grises suave (Mantiene el anti-aliasing, crucial para OCR)
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const data = imageData.data;
-            
-            for (let i = 0; i < data.length; i += 4) {
-                const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-                data[i] = gray;     // R
-                data[i + 1] = gray; // G
-                data[i + 2] = gray; // B
-                // Alpha se deja igual
-            }
-            
-            ctx.putImageData(imageData, 0, 0);
-            resolve(canvas.toDataURL('image/png'));
-        };
-        img.onerror = () => resolve(imageDataUrl);
-        img.src = imageDataUrl;
-    });
-}
-
-// ===== PROCESAR IMAGEN =====
+// ===== PROCESAR IMAGEN (SIN FILTROS, DIRECTO A LA IA) =====
 processBtn.addEventListener('click', async () => {
     if (!currentImageData) return;
     showSection(loadingSection);
-    
-    try {
-        loadingStatus.textContent = 'Mejorando calidad de imagen...';
-        enhancedImageData = await preprocessImage(currentImageData);
-        
-        // Mostrar imagen mejorada para confirmar
-        enhancedImage.src = enhancedImageData;
-        showSection(enhancedPreviewSection);
-        
-    } catch (error) {
-        console.error('Error preprocesando:', error);
-        enhancedImageData = currentImageData;
-        await processWithOCR();
-    }
-});
-
-// Confirmar imagen mejorada
-confirmEnhancedBtn.addEventListener('click', async () => {
-    await processWithOCR();
-});
-
-// Usar imagen original
-cancelEnhancedBtn.addEventListener('click', async () => {
-    enhancedImageData = currentImageData;
-    await processWithOCR();
+    await processWithOCR(currentImageData);
 });
 
 // ===== PROCESAR CON OCR (CON REINTENTOS) =====
-async function processWithOCR() {
-    showSection(loadingSection);
-    loadingStatus.textContent = 'Leyendo con IA (OCR.space)...';
+async function processWithOCR(imageToSend) {
+    loadingStatus.textContent = 'Enviando imagen original a la IA...';
     
     let text = null;
     let lastError = null;
@@ -324,10 +213,8 @@ async function processWithOCR() {
                 loadingStatus.textContent = `Reintento ${attempt}/${MAX_RETRIES}...`;
                 await new Promise(resolve => setTimeout(resolve, 1000));
             }
-            
-            text = await callOcrSpace(enhancedImageData);
+            text = await callOcrSpace(imageToSend);
             break;
-            
         } catch (error) {
             lastError = error;
             console.warn(`Intento ${attempt} falló:`, error.message);
@@ -337,9 +224,8 @@ async function processWithOCR() {
     if (!text || text.trim().length < 10) {
         console.warn('OCR.space falló, usando respaldo local:', lastError?.message);
         loadingStatus.textContent = 'Modo sin conexión: Leyendo localmente...';
-        
         try {
-            await processWithTesseract();
+            await processWithTesseract(imageToSend);
         } catch (tesseractError) {
             showError('No se pudo leer la imagen. Prueba a acercarte más o usa la entrada manual.');
         }
@@ -353,7 +239,6 @@ async function processWithOCR() {
         showSection(manualSection);
         return;
     }
-    
     showVerificationScreen();
 }
 
@@ -382,7 +267,7 @@ async function callOcrSpace(imageDataUrl) {
 }
 
 // ===== TESSERACT (Respaldo Offline) =====
-async function processWithTesseract() {
+async function processWithTesseract(imageDataUrl) {
     if (!worker) {
         worker = await Tesseract.createWorker('spa+eng', 1, {
             logger: (m) => {
@@ -396,23 +281,16 @@ async function processWithTesseract() {
             tessedit_char_whitelist: '0123456789.:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz ,/()-'
         });
     }
-    
-    const { data: { text } } = await worker.recognize(currentImageData);
+    const { data: { text } } = await worker.recognize(imageDataUrl);
     detectedAlbaranes = extractAlbaranes(text);
-    
-    if (detectedAlbaranes.length === 0) {
-        showSection(manualSection);
-        return;
-    }
+    if (detectedAlbaranes.length === 0) { showSection(manualSection); return; }
     showVerificationScreen();
 }
 
 // ===== PANTALLA DE VERIFICACIÓN =====
 function showVerificationScreen() {
     verifyContainer.innerHTML = '';
-    const rowsToEdit = 3;
-    
-    for (let i = 0; i < rowsToEdit; i++) {
+    for (let i = 0; i < 3; i++) {
         const data = detectedAlbaranes[i] || { numero: '', fecha: '' };
         const row = document.createElement('div');
         row.className = 'verify-row';
@@ -429,17 +307,13 @@ function showVerificationScreen() {
 confirmVerifyBtn.addEventListener('click', async () => {
     const rows = verifyContainer.querySelectorAll('.verify-row');
     const finalAlbaranes = [];
-    
     rows.forEach(row => {
         const num = row.querySelector('.alb-input').value.trim();
         const fecha = row.querySelector('.fecha-input').value.trim();
         if (num && fecha) finalAlbaranes.push({ numero: num, fecha: fecha });
     });
     
-    if (finalAlbaranes.length === 0) {
-        showError('No hay datos válidos para generar.');
-        return;
-    }
+    if (finalAlbaranes.length === 0) { showError('No hay datos válidos.'); return; }
     
     try {
         loadingStatus.textContent = 'Generando códigos...';
@@ -454,7 +328,6 @@ confirmVerifyBtn.addEventListener('click', async () => {
 
 cancelVerifyBtn.addEventListener('click', () => {
     currentImageData = null;
-    enhancedImageData = null;
     showSection(null);
 });
 
@@ -462,16 +335,13 @@ cancelVerifyBtn.addEventListener('click', () => {
 function extractAlbaranes(text) {
     const lines = text.split(/[\n\r]+/).map(line => line.trim()).filter(line => line.length > 0);
     const albaranes = [];
-    
     const albaranPattern = /008\d{6,8}/g;
     const datePattern = /(\d{1,2}[.\-/]\d{1,2}[.\-/]\d{2,4}\s+\d{1,2}:\d{2}(?::\d{2})?)/g;
-    
     const fullText = text.replace(/[\n\r]+/g, ' ');
     const allAlbaranes = [...fullText.matchAll(new RegExp(albaranPattern.source, 'g'))].map(m => m[0]);
     
     for (const albaran of allAlbaranes) {
         if (albaranes.some(a => a.numero === albaran)) continue;
-        
         let albaranLineIndex = -1;
         for (let i = 0; i < lines.length; i++) {
             if (lines[i].includes(albaran)) { albaranLineIndex = i; break; }
@@ -481,12 +351,10 @@ function extractAlbaranes(text) {
         let fechaEncontrada = '';
         const startLine = Math.max(0, albaranLineIndex - 3);
         const endLine = Math.min(lines.length - 1, albaranLineIndex + 3);
-        
         for (let i = startLine; i <= endLine; i++) {
             const dateMatch = lines[i].match(new RegExp(datePattern.source));
             if (dateMatch) { fechaEncontrada = dateMatch[1]; break; }
         }
-        
         if (fechaEncontrada) {
             albaranes.push({ numero: albaran, fecha: fechaEncontrada });
             if (albaranes.length >= 3) break;
@@ -504,7 +372,6 @@ generateManualBtn.addEventListener('click', async () => {
         if (num && fecha) albaranes.push({ numero: num, fecha: fecha });
     }
     if (albaranes.length === 0) { showError('Introduce al menos un albarán y su fecha.'); return; }
-    
     try {
         await generateBarcodes(albaranes);
         saveDataLocally(albaranes);
@@ -518,11 +385,9 @@ generateManualBtn.addEventListener('click', async () => {
 async function generateBarcodes(albaranes) {
     barcodesContainer.innerHTML = '';
     await createBarcodeCard('Logisticaneo', 'Logisticaneo', 'logisticaneo');
-    
     for (let index = 0; index < albaranes.length; index++) {
         const albaran = albaranes[index];
-        const texto = `${albaran.numero} - ${albaran.fecha}`;
-        await createBarcodeCard(albaran.numero, texto, `albaran-${index}`);
+        await createBarcodeCard(albaran.numero, `${albaran.numero} - ${albaran.fecha}`, `albaran-${index}`);
     }
 }
 
@@ -536,14 +401,12 @@ function createBarcodeCard(codigo, texto, id) {
         svg.setAttribute('id', `barcode-${id}`);
         barcodeDiv.appendChild(svg);
         card.appendChild(barcodeDiv);
-        
         if (texto) {
             const textDiv = document.createElement('div');
             textDiv.className = 'barcode-text';
             textDiv.textContent = texto;
             card.appendChild(textDiv);
         }
-        
         barcodesContainer.appendChild(card);
         setTimeout(() => {
             try {
@@ -561,13 +424,9 @@ function createBarcodeCard(codigo, texto, id) {
     });
 }
 
-// ===== FUNCIONES DE ALMACENAMIENTO LOCAL =====
+// ===== ALMACENAMIENTO LOCAL =====
 function saveDataLocally(albaranes) {
-    try {
-        localStorage.setItem('savedAlbaranes', JSON.stringify(albaranes));
-    } catch (e) {
-        console.error('No se pudo guardar en local:', e);
-    }
+    try { localStorage.setItem('savedAlbaranes', JSON.stringify(albaranes)); } catch (e) { console.error(e); }
 }
 
 function loadSavedData() {
@@ -581,9 +440,7 @@ function loadSavedData() {
                 return true;
             }
         }
-    } catch (e) {
-        console.error('Error al cargar datos guardados:', e);
-    }
+    } catch (e) { console.error(e); }
     return false;
 }
 
@@ -593,24 +450,13 @@ function clearSavedData() {
     showSection(null);
 }
 
-// ===== BOTONES DE LIMPIEZA Y REINTENTO =====
 clearDataBtn.addEventListener('click', () => {
-    if (confirm('¿Estás seguro de que quieres borrar los códigos guardados?')) {
-        clearSavedData();
-    }
+    if (confirm('¿Estás seguro de que quieres borrar los códigos guardados?')) clearSavedData();
 });
 
-retryBtn.addEventListener('click', () => {
-    currentImageData = null;
-    enhancedImageData = null;
-    showSection(null);
-});
+retryBtn.addEventListener('click', () => { currentImageData = null; showSection(null); });
+dismissApiWarning.addEventListener('click', () => showSection(null));
 
-dismissApiWarning.addEventListener('click', () => {
-    showSection(null);
-});
-
-// ===== SERVICE WORKER =====
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('./sw.js')
@@ -619,7 +465,6 @@ if ('serviceWorker' in navigator) {
     });
 }
 
-// ===== INICIALIZACIÓN =====
 initTheme();
 updateConnectionStatus();
 validateApiKey();

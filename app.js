@@ -1,6 +1,6 @@
 // ===== CONFIGURACIÓN =====
 const OCR_SPACE_API_KEY = 'K87772587088957'; // <-- PEGA AQUÍ TU CLAVE REAL
-const MAX_RETRIES = 2; // Número de reintentos si OCR.space falla
+const MAX_RETRIES = 2;
 
 // ===== ELEMENTOS DEL DOM =====
 const themeToggle = document.getElementById('theme-toggle');
@@ -52,6 +52,7 @@ let currentRotation = 0;
 function initTheme() {
     const savedTheme = localStorage.getItem('theme');
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    
     if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
         document.body.classList.add('dark-mode');
         themeIcon.textContent = '☀️';
@@ -60,13 +61,20 @@ function initTheme() {
     }
 }
 
+themeToggle.addEventListener('click', () => {
+    document.body.classList.toggle('dark-mode');
+    const isDark = document.body.classList.contains('dark-mode');
+    themeIcon.textContent = isDark ? '☀️' : '🌙';
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+});
+
 // ===== INDICADOR DE CONEXIÓN =====
 function updateConnectionStatus() {
     if (navigator.onLine) {
         connectionStatus.textContent = '🟢';
         connectionStatus.title = 'Conectado - Usará IA';
     } else {
-        connectionStatus.textContent = '🔴';
+        connectionStatus.textContent = '';
         connectionStatus.title = 'Sin conexión - Modo local';
     }
 }
@@ -77,7 +85,7 @@ window.addEventListener('offline', updateConnectionStatus);
 // ===== VALIDACIÓN API KEY =====
 async function validateApiKey() {
     if (!OCR_SPACE_API_KEY || OCR_SPACE_API_KEY === 'TU_API_KEY_DE_OCR_SPACE') {
-        apiWarningText.textContent = '️ La clave de OCR no está configurada. Edita el archivo app.js y añade tu API key.';
+        apiWarningText.textContent = '⚠️ La clave de OCR no está configurada. Edita el archivo app.js y añade tu API key.';
         showSection(apiWarningSection);
         return false;
     }
@@ -90,7 +98,7 @@ async function validateApiKey() {
         });
         
         if (response.status === 401 || response.status === 403) {
-            apiWarningText.textContent = '⚠️ La clave de OCR es inválida. Revisa tu API key en app.js.';
+            apiWarningText.textContent = '️ La clave de OCR es inválida. Revisa tu API key en app.js.';
             showSection(apiWarningSection);
             return false;
         }
@@ -98,7 +106,7 @@ async function validateApiKey() {
         return true;
     } catch (error) {
         console.warn('No se pudo validar la API key:', error);
-        return true; // Asumimos que está bien si no podemos comprobarlo
+        return true;
     }
 }
 
@@ -116,7 +124,6 @@ function showError(message) {
 
 // ===== CÁMARA Y GALERÍA =====
 cameraBtn.addEventListener('click', () => {
-    // MEJORA J: Preguntar antes de borrar
     const savedData = localStorage.getItem('savedAlbaranes');
     if (savedData) {
         if (confirm('¿Borrar los códigos actuales y empezar uno nuevo?')) {
@@ -157,7 +164,7 @@ function handleImageSelect(e) {
 cameraInput.addEventListener('change', handleImageSelect);
 galleryInput.addEventListener('change', handleImageSelect);
 
-// ===== ROTAR IMAGEN (MEJORA D) =====
+// ===== ROTAR IMAGEN =====
 rotateBtn.addEventListener('click', () => {
     if (!currentImageData) return;
     
@@ -186,7 +193,7 @@ rotateBtn.addEventListener('click', () => {
     img.src = currentImageData;
 });
 
-// ===== RECORTAR IMAGEN (MEJORA E) =====
+// ===== RECORTAR IMAGEN =====
 cropBtn.addEventListener('click', () => {
     if (!currentImageData) return;
     
@@ -229,7 +236,7 @@ cancelCropBtn.addEventListener('click', () => {
     showSection(previewSection);
 });
 
-// ===== PREPROCESAMIENTO DE IMAGEN =====
+// ===== PREPROCESAMIENTO DE IMAGEN (SIN BINARIZACIÓN) =====
 async function preprocessImage(imageDataUrl) {
     return new Promise((resolve) => {
         const img = new Image();
@@ -252,6 +259,7 @@ async function preprocessImage(imageDataUrl) {
             const width = canvas.width;
             const height = canvas.height;
             
+            // 1. Convertir a escala de grises
             const gray = new Uint8Array(width * height);
             let minVal = 255, maxVal = 0;
             
@@ -262,6 +270,7 @@ async function preprocessImage(imageDataUrl) {
                 if (grayVal > maxVal) maxVal = grayVal;
             }
             
+            // 2. Estirar contraste
             const contrastRange = maxVal - minVal;
             for (let i = 0, j = 0; i < data.length; i += 4, j++) {
                 let normalized = contrastRange > 0 ? ((gray[j] - minVal) / contrastRange) * 255 : 128;
@@ -273,6 +282,7 @@ async function preprocessImage(imageDataUrl) {
                 data[i + 2] = normalized;
             }
             
+            // 3. Filtro de nitidez
             const sharpened = new Uint8Array(width * height);
             for (let y = 1; y < height - 1; y++) {
                 for (let x = 1; x < width - 1; x++) {
@@ -297,35 +307,7 @@ async function preprocessImage(imageDataUrl) {
                 }
             }
             
-            const histogram = new Array(256).fill(0);
-            for (let i = 0; i < gray.length; i++) histogram[gray[i]]++;
-            
-            const total = gray.length;
-            let sum = 0;
-            for (let i = 0; i < 256; i++) sum += i * histogram[i];
-            
-            let sumB = 0, wB = 0, wF = 0, maxVariance = 0, threshold = 128;
-            for (let t = 0; t < 256; t++) {
-                wB += histogram[t];
-                if (wB === 0) continue;
-                wF = total - wB;
-                if (wF === 0) break;
-                sumB += t * histogram[t];
-                const mB = sumB / wB;
-                const mF = (sum - sumB) / wF;
-                const variance = wB * wF * (mB - mF) * (mB - mF);
-                if (variance > maxVariance) {
-                    maxVariance = variance;
-                    threshold = t;
-                }
-            }
-            
-            for (let i = 0, j = 0; i < data.length; i += 4, j++) {
-                const final = gray[j] > threshold ? 255 : 0;
-                data[i] = final;
-                data[i + 1] = final;
-                data[i + 2] = final;
-            }
+            // ELIMINADO: Binarización adaptativa (no convertir a blanco/negro puro)
             
             ctx.putImageData(imageData, 0, 0);
             resolve(canvas.toDataURL('image/png'));
@@ -344,7 +326,6 @@ processBtn.addEventListener('click', async () => {
         loadingStatus.textContent = 'Mejorando calidad de imagen...';
         enhancedImageData = await preprocessImage(currentImageData);
         
-        // MEJORA F: Mostrar imagen mejorada para confirmar
         enhancedImage.src = enhancedImageData;
         showSection(enhancedPreviewSection);
         
@@ -355,18 +336,16 @@ processBtn.addEventListener('click', async () => {
     }
 });
 
-// Confirmar imagen mejorada
 confirmEnhancedBtn.addEventListener('click', async () => {
     await processWithOCR();
 });
 
-// Usar imagen original
 cancelEnhancedBtn.addEventListener('click', async () => {
     enhancedImageData = currentImageData;
     await processWithOCR();
 });
 
-// ===== PROCESAR CON OCR (CON REINTENTOS - MEJORA C) =====
+// ===== PROCESAR CON OCR =====
 async function processWithOCR() {
     showSection(loadingSection);
     loadingStatus.textContent = 'Leyendo con IA (OCR.space)...';
@@ -374,16 +353,15 @@ async function processWithOCR() {
     let text = null;
     let lastError = null;
     
-    // MEJORA C: Reintentos automáticos
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {
             if (attempt > 1) {
                 loadingStatus.textContent = `Reintento ${attempt}/${MAX_RETRIES}...`;
-                await new Promise(resolve => setTimeout(resolve, 1000)); // Esperar 1 segundo
+                await new Promise(resolve => setTimeout(resolve, 1000));
             }
             
             text = await callOcrSpace(enhancedImageData);
-            break; // Si funciona, salimos del bucle
+            break;
             
         } catch (error) {
             lastError = error;
@@ -438,7 +416,7 @@ async function callOcrSpace(imageDataUrl) {
     throw new Error('No se encontró texto en la imagen');
 }
 
-// ===== TESSERACT (Respaldo Offline) =====
+// ===== TESSERACT =====
 async function processWithTesseract() {
     if (!worker) {
         worker = await Tesseract.createWorker('spa+eng', 1, {
@@ -618,7 +596,7 @@ function createBarcodeCard(codigo, texto, id) {
     });
 }
 
-// ===== FUNCIONES DE ALMACENAMIENTO LOCAL =====
+// ===== ALMACENAMIENTO LOCAL =====
 function saveDataLocally(albaranes) {
     try {
         localStorage.setItem('savedAlbaranes', JSON.stringify(albaranes));
@@ -650,7 +628,7 @@ function clearSavedData() {
     showSection(null);
 }
 
-// ===== BOTONES DE LIMPIEZA Y REINTENTO =====
+// ===== BOTONES =====
 clearDataBtn.addEventListener('click', () => {
     if (confirm('¿Estás seguro de que quieres borrar los códigos guardados?')) {
         clearSavedData();

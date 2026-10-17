@@ -46,14 +46,14 @@ function initTheme() {
         document.body.classList.add('dark-mode');
         themeIcon.textContent = '☀️';
     } else {
-        themeIcon.textContent = '🌙';
+        themeIcon.textContent = '';
     }
 }
 
 themeToggle.addEventListener('click', () => {
     document.body.classList.toggle('dark-mode');
     const isDark = document.body.classList.contains('dark-mode');
-    themeIcon.textContent = isDark ? '☀️' : '🌙';
+    themeIcon.textContent = isDark ? '☀️' : '';
     localStorage.setItem('theme', isDark ? 'dark' : 'light');
 });
 
@@ -160,29 +160,23 @@ cancelCropBtn.addEventListener('click', () => {
     showSection(previewSection);
 });
 
-// ===== PREPARAR IMAGEN (COMPRESIÓN PARA EVITAR LÍMITE DE VERCEL) =====
+// ===== PREPARAR IMAGEN =====
 async function prepareImageForAPI(imageDataUrl) {
     return new Promise((resolve) => {
         const img = new Image();
         img.onload = () => {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
-            
-            // Redimensionar a un máximo de 1000px de ancho (suficiente para OCR y reduce el peso a < 1MB)
             const maxWidth = 1000;
             let width = img.width;
             let height = img.height;
-            
             if (width > maxWidth) {
                 height = Math.round((height * maxWidth) / width);
                 width = maxWidth;
             }
-            
             canvas.width = width;
             canvas.height = height;
             ctx.drawImage(img, 0, 0, width, height);
-            
-            // Comprimir a JPEG con calidad 0.7
             resolve(canvas.toDataURL('image/jpeg', 0.7));
         };
         img.src = imageDataUrl;
@@ -200,13 +194,14 @@ processBtn.addEventListener('click', async () => {
         await processWithGemini(compressedImage);
     } catch (error) {
         console.error('Error al preparar la imagen:', error);
-        showError('Error al preparar la imagen. Inténtalo de nuevo.');
+        showError('Error al preparar la imagen: ' + error.message);
     }
 });
 
 async function processWithGemini(imageDataUrl) {
     loadingStatus.textContent = 'Procesando con IA...';
     let text = null;
+    let lastErrorMsg = 'Error desconocido'; // AQUÍ GUARDAMOS EL ERROR REAL
     
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {
@@ -217,12 +212,14 @@ async function processWithGemini(imageDataUrl) {
             text = await callGeminiAPI(imageDataUrl);
             break;
         } catch (error) {
+            lastErrorMsg = error.message; // CAPTURAMOS EL MENSAJE EXACTO
             console.error(`Intento ${attempt} falló:`, error);
         }
     }
     
     if (!text) {
-        showError('La IA no pudo procesar la imagen. Revisa tu conexión o usa el modo manual.');
+        // AHORA MOSTRAMOS EL ERROR REAL EN PANTALLA
+        showError('Error de IA: ' + lastErrorMsg);
         return;
     }
     
@@ -249,7 +246,7 @@ async function callGeminiAPI(imageDataUrl) {
     });
 
     if (!response.ok) {
-        const err = await response.json().catch(() => ({ error: 'Error desconocido del servidor' }));
+        const err = await response.json().catch(() => ({ error: 'Error desconocido del servidor (posible timeout de Vercel)' }));
         throw new Error(err.error || `Error del servidor: ${response.status}`);
     }
 

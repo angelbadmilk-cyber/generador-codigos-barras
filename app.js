@@ -32,26 +32,11 @@ const clearDataBtn = document.getElementById('clear-data-btn');
 const errorSection = document.getElementById('error-section');
 const errorText = document.getElementById('error-text');
 const retryBtn = document.getElementById('retry-btn');
-const apiWarningSection = document.getElementById('api-warning-section');
-const apiWarningText = document.getElementById('api-warning-text');
-const apiKeyInput = document.getElementById('api-key-input');
-const saveApiKeyBtn = document.getElementById('save-api-key-btn');
-const dismissApiWarning = document.getElementById('dismiss-api-warning');
 
 let currentImageData = null;
-let worker = null;
 let detectedAlbaranes = [];
 let cropper = null;
 let currentRotation = 0;
-
-// ===== GESTIÓN DE LA API KEY (SEGURA) =====
-function getGeminiApiKey() {
-    return localStorage.getItem('gemini_api_key') || '';
-}
-
-function saveGeminiApiKey(key) {
-    localStorage.setItem('gemini_api_key', key);
-}
 
 // ===== TEMA =====
 function initTheme() {
@@ -85,35 +70,9 @@ function updateConnectionStatus() {
 window.addEventListener('online', updateConnectionStatus);
 window.addEventListener('offline', updateConnectionStatus);
 
-// ===== VALIDACIÓN API KEY =====
-function validateApiKey() {
-    const key = getGeminiApiKey();
-    if (!key) {
-        apiWarningText.textContent = '⚠️ Necesitas configurar tu clave de API de Gemini para que la IA funcione.';
-        showSection(apiWarningSection);
-        return false;
-    }
-    return true;
-}
-
-saveApiKeyBtn.addEventListener('click', () => {
-    const key = apiKeyInput.value.trim();
-    if (key.startsWith('AIza')) {
-        saveGeminiApiKey(key);
-        apiKeyInput.value = '';
-        showSection(null);
-        loadSavedData();
-        alert('✅ Clave guardada de forma segura en este dispositivo.');
-    } else {
-        alert('❌ La clave no parece válida. Debe empezar por "AIza".');
-    }
-});
-
-dismissApiWarning.addEventListener('click', () => showSection(null));
-
 // ===== GESTIÓN DE SECCIONES =====
 function showSection(section) {
-    const sections = [previewSection, cropSection, loadingSection, verifySection, manualSection, resultsSection, errorSection, apiWarningSection];
+    const sections = [previewSection, cropSection, loadingSection, verifySection, manualSection, resultsSection, errorSection];
     sections.forEach(s => s.classList.add('hidden'));
     if (section) section.classList.remove('hidden');
 }
@@ -201,16 +160,15 @@ cancelCropBtn.addEventListener('click', () => {
     showSection(previewSection);
 });
 
-// ===== PROCESAR CON GEMINI =====
+// ===== PROCESAR CON GEMINI (VÍA SERVIDOR SEGURO) =====
 processBtn.addEventListener('click', async () => {
     if (!currentImageData) return;
-    if (!validateApiKey()) return;
     showSection(loadingSection);
     await processWithGemini(currentImageData);
 });
 
 async function processWithGemini(imageDataUrl) {
-    loadingStatus.textContent = 'Enviando imagen a Gemini IA...';
+    loadingStatus.textContent = 'Procesando con IA...';
     let text = null;
     
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
@@ -247,35 +205,20 @@ async function processWithGemini(imageDataUrl) {
 }
 
 async function callGeminiAPI(imageDataUrl) {
-    const GEMINI_API_KEY = getGeminiApiKey();
-    const base64Data = imageDataUrl.split(',')[1];
-    
-    const prompt = `Eres un asistente experto en extracción de datos de tablas logísticas. Analiza la imagen adjunta. Busca en la tabla las filas donde el cliente sea "VALENCIA MODULOS DE PUERTA". Extrae un MÁXIMO de 3 albaranes y sus fechas. Responde ÚNICAMENTE con este formato, sin markdown, sin negritas, sin explicaciones, sin saludo:
-ALBARAN: [numero] | FECHA: [fecha]
-Si no encuentras ninguno que coincida con ese cliente, responde ÚNICAMENTE con la palabra: NO_ENCONTRADO`;
-
-    const requestBody = {
-        contents: [{
-            parts: [
-                { text: prompt },
-                { inline_data: { mime_type: "image/jpeg", data: base64Data } }
-            ]
-        }]
-    };
-
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+    // Llamamos a NUESTRO servidor de Vercel, no directamente a Google
+    const response = await fetch('/api/gemini', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify({ imageDataUrl })
     });
 
     if (!response.ok) {
         const err = await response.json();
-        throw new Error(err.error?.message || 'Error en la API de Gemini');
+        throw new Error(err.error || 'Error en el servidor de Vercel');
     }
 
     const data = await response.json();
-    return data.candidates[0].content.parts[0].text.trim();
+    return data.text;
 }
 
 function parseGeminiResponse(text) {
@@ -285,7 +228,7 @@ function parseGeminiResponse(text) {
         const match = line.match(/ALBARAN:\s*(\d+)\s*\|\s*FECHA:\s*(.+)/i);
         if (match) {
             albaranes.push({ numero: match[1].trim(), fecha: match[2].trim() });
-            if (albaranes.length >= 3) break;
+            if (albaranes.length >= 4) break; // AHORA ADMITE HASTA 4
         }
     }
     return albaranes;
@@ -294,7 +237,7 @@ function parseGeminiResponse(text) {
 // ===== VERIFICACIÓN Y GENERACIÓN =====
 function showVerificationScreen() {
     verifyContainer.innerHTML = '';
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 4; i++) { // AHORA SON 4 FILAS
         const data = detectedAlbaranes[i] || { numero: '', fecha: '' };
         const row = document.createElement('div');
         row.className = 'verify-row';
@@ -334,7 +277,7 @@ cancelVerifyBtn.addEventListener('click', () => { currentImageData = null; showS
 
 generateManualBtn.addEventListener('click', async () => {
     const albaranes = [];
-    for (let i = 1; i <= 3; i++) {
+    for (let i = 1; i <= 4; i++) { // AHORA SON 4
         const num = document.getElementById(`manual-alb-${i}`).value.trim();
         const fecha = document.getElementById(`manual-fecha-${i}`).value.trim();
         if (num && fecha) albaranes.push({ numero: num, fecha: fecha });
@@ -430,5 +373,4 @@ if ('serviceWorker' in navigator) {
 
 initTheme();
 updateConnectionStatus();
-validateApiKey();
 loadSavedData();

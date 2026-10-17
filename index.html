@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#2196f3">
     <title>Generador de Códigos de Barras</title>
     <link rel="manifest" href="manifest.json">
-    <link rel="stylesheet" href="styles.css?v=10">
+    <link rel="stylesheet" href="styles.css?v=11">
     <link rel="icon" type="image/png" href="icons/icon-192.png">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
 </head>
@@ -80,6 +80,11 @@
                     <input type="text" id="manual-alb-3" placeholder="Ej: 0082263337">
                     <input type="text" id="manual-fecha-3" placeholder="Ej: 14.10.2026 21:00:00">
                 </div>
+                <div class="manual-input-group">
+                    <label>Albarán 4</label>
+                    <input type="text" id="manual-alb-4" placeholder="Ej: 0082263338">
+                    <input type="text" id="manual-fecha-4" placeholder="Ej: 15.10.2026 09:00:00">
+                </div>
                 <button id="generate-manual-btn" class="btn-primary">Generar Códigos</button>
             </section>
 
@@ -96,18 +101,6 @@
                 </div>
                 <button id="retry-btn" class="btn-secondary">Reintentar</button>
             </section>
-
-            <!-- SECCIÓN DE CONFIGURACIÓN SEGURA DE API KEY -->
-            <section id="api-warning-section" class="api-warning-section hidden">
-                <div class="error-message">
-                    <span class="error-icon">🔑</span>
-                    <p id="api-warning-text">Necesitas configurar tu clave de API de Gemini</p>
-                </div>
-                <p class="hint">Pega aquí tu clave de Google AI Studio (empieza por "AIza"). Se guardará solo en este dispositivo.</p>
-                <input type="text" id="api-key-input" class="verify-input" placeholder="AIzaSy..." style="margin-bottom: 10px;">
-                <button id="save-api-key-btn" class="btn-primary">💾 Guardar Clave de forma segura</button>
-                <button id="dismiss-api-warning" class="btn-secondary">Cancelar</button>
-            </section>
         </main>
 
         <footer><p>100% Privado y Seguro</p></footer>
@@ -115,6 +108,6 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
-    <script src="app.js?v=10"></script>
+    <script src="app.js?v=11"></script>
 </body>
 </html>

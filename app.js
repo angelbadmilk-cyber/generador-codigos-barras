@@ -160,11 +160,48 @@ cancelCropBtn.addEventListener('click', () => {
     showSection(previewSection);
 });
 
-// ===== PROCESAR CON GEMINI (VÍA SERVIDOR SEGURO) =====
+// ===== PREPARAR IMAGEN (COMPRESIÓN PARA EVITAR LÍMITE DE VERCEL) =====
+async function prepareImageForAPI(imageDataUrl) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            // Redimensionar a un máximo de 1000px de ancho (suficiente para OCR y reduce el peso a < 1MB)
+            const maxWidth = 1000;
+            let width = img.width;
+            let height = img.height;
+            
+            if (width > maxWidth) {
+                height = Math.round((height * maxWidth) / width);
+                width = maxWidth;
+            }
+            
+            canvas.width = width;
+            canvas.height = height;
+            ctx.drawImage(img, 0, 0, width, height);
+            
+            // Comprimir a JPEG con calidad 0.7
+            resolve(canvas.toDataURL('image/jpeg', 0.7));
+        };
+        img.src = imageDataUrl;
+    });
+}
+
+// ===== PROCESAR CON GEMINI =====
 processBtn.addEventListener('click', async () => {
     if (!currentImageData) return;
     showSection(loadingSection);
-    await processWithGemini(currentImageData);
+    
+    try {
+        loadingStatus.textContent = 'Optimizando imagen...';
+        const compressedImage = await prepareImageForAPI(currentImageData);
+        await processWithGemini(compressedImage);
+    } catch (error) {
+        console.error('Error al preparar la imagen:', error);
+        showError('Error al preparar la imagen. Inténtalo de nuevo.');
+    }
 });
 
 async function processWithGemini(imageDataUrl) {
@@ -180,7 +217,7 @@ async function processWithGemini(imageDataUrl) {
             text = await callGeminiAPI(imageDataUrl);
             break;
         } catch (error) {
-            console.warn(`Intento ${attempt} falló:`, error.message);
+            console.error(`Intento ${attempt} falló:`, error);
         }
     }
     
@@ -205,7 +242,6 @@ async function processWithGemini(imageDataUrl) {
 }
 
 async function callGeminiAPI(imageDataUrl) {
-    // Llamamos a NUESTRO servidor de Vercel, no directamente a Google
     const response = await fetch('/api/gemini', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -213,8 +249,8 @@ async function callGeminiAPI(imageDataUrl) {
     });
 
     if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || 'Error en el servidor de Vercel');
+        const err = await response.json().catch(() => ({ error: 'Error desconocido del servidor' }));
+        throw new Error(err.error || `Error del servidor: ${response.status}`);
     }
 
     const data = await response.json();
@@ -228,7 +264,7 @@ function parseGeminiResponse(text) {
         const match = line.match(/ALBARAN:\s*(\d+)\s*\|\s*FECHA:\s*(.+)/i);
         if (match) {
             albaranes.push({ numero: match[1].trim(), fecha: match[2].trim() });
-            if (albaranes.length >= 4) break; // AHORA ADMITE HASTA 4
+            if (albaranes.length >= 4) break;
         }
     }
     return albaranes;
@@ -237,7 +273,7 @@ function parseGeminiResponse(text) {
 // ===== VERIFICACIÓN Y GENERACIÓN =====
 function showVerificationScreen() {
     verifyContainer.innerHTML = '';
-    for (let i = 0; i < 4; i++) { // AHORA SON 4 FILAS
+    for (let i = 0; i < 4; i++) {
         const data = detectedAlbaranes[i] || { numero: '', fecha: '' };
         const row = document.createElement('div');
         row.className = 'verify-row';
@@ -277,7 +313,7 @@ cancelVerifyBtn.addEventListener('click', () => { currentImageData = null; showS
 
 generateManualBtn.addEventListener('click', async () => {
     const albaranes = [];
-    for (let i = 1; i <= 4; i++) { // AHORA SON 4
+    for (let i = 1; i <= 4; i++) {
         const num = document.getElementById(`manual-alb-${i}`).value.trim();
         const fecha = document.getElementById(`manual-fecha-${i}`).value.trim();
         if (num && fecha) albaranes.push({ numero: num, fecha: fecha });

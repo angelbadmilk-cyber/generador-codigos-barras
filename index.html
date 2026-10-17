@@ -6,9 +6,8 @@
     <meta name="theme-color" content="#2196f3">
     <title>Generador de Códigos de Barras</title>
     <link rel="manifest" href="manifest.json">
-    <link rel="stylesheet" href="styles.css?v=9">
+    <link rel="stylesheet" href="styles.css?v=10">
     <link rel="icon" type="image/png" href="icons/icon-192.png">
-    <!-- Cropper.js para recortar imágenes -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
 </head>
 <body>
@@ -17,14 +16,11 @@
             <h1>Códigos de Albarán</h1>
             <div class="header-controls">
                 <span id="connection-status" class="connection-status" title="Estado de conexión">🟢</span>
-                <button id="theme-toggle" class="theme-toggle">
-                    <span class="theme-icon">🌙</span>
-                </button>
+                <button id="theme-toggle" class="theme-toggle"><span class="theme-icon">🌙</span></button>
             </div>
         </header>
 
         <main>
-            <!-- Pantalla 1: Inicio -->
             <section class="camera-section">
                 <button id="camera-btn" class="btn-primary">📷 Tomar Nueva Foto</button>
                 <button id="gallery-btn" class="btn-secondary">🖼️ Subir desde Galería</button>
@@ -32,51 +28,32 @@
                 <input type="file" id="gallery-input" accept="image/*" style="display: none;">
             </section>
 
-            <!-- Pantalla 2: Vista Previa con controles -->
             <section id="preview-section" class="preview-section hidden">
                 <h2>Imagen cargada</h2>
-                <div class="image-container">
-                    <img id="preview-image" alt="Vista previa">
-                </div>
+                <div class="image-container"><img id="preview-image" alt="Vista previa"></div>
                 <div class="image-controls">
                     <button id="rotate-btn" class="btn-secondary small">🔄 Rotar 90°</button>
-                    <button id="crop-btn" class="btn-secondary small">️ Recortar</button>
+                    <button id="crop-btn" class="btn-secondary small">✂️ Recortar</button>
                 </div>
-                <button id="process-btn" class="btn-primary">🔍 Procesar Imagen</button>
+                <button id="process-btn" class="btn-primary">🔍 Procesar con IA</button>
             </section>
 
-            <!-- Pantalla 2b: Modo Recorte -->
             <section id="crop-section" class="crop-section hidden">
                 <h2>Recortar imagen</h2>
                 <p class="hint">Ajusta el recuadro para seleccionar solo la tabla</p>
-                <div class="crop-container">
-                    <img id="crop-image" alt="Imagen a recortar">
-                </div>
+                <div class="crop-container"><img id="crop-image" alt="Imagen a recortar"></div>
                 <div class="crop-controls">
                     <button id="confirm-crop-btn" class="btn-primary">✅ Aplicar recorte</button>
                     <button id="cancel-crop-btn" class="btn-secondary">❌ Cancelar</button>
                 </div>
             </section>
 
-            <!-- Pantalla 3: Cargando -->
             <section id="loading-section" class="loading-section hidden">
                 <div class="spinner"></div>
                 <p>Procesando...</p>
-                <p class="loading-status" id="loading-status">Mejorando calidad de imagen...</p>
+                <p class="loading-status" id="loading-status">Enviando imagen a Gemini IA...</p>
             </section>
 
-            <!-- Pantalla 3b: Confirmar imagen mejorada -->
-            <section id="enhanced-preview-section" class="enhanced-preview-section hidden">
-                <h2>Imagen mejorada</h2>
-                <p class="hint">Así verá la IA tu imagen. ¿Se lee bien?</p>
-                <div class="image-container">
-                    <img id="enhanced-image" alt="Imagen mejorada">
-                </div>
-                <button id="confirm-enhanced-btn" class="btn-primary">✅ Sí, procesar</button>
-                <button id="cancel-enhanced-btn" class="btn-secondary">🔄 Usar imagen original</button>
-            </section>
-
-            <!-- Pantalla 4: Verificación -->
             <section id="verify-section" class="verify-section hidden">
                 <h2>Verifica los datos</h2>
                 <p class="hint">Corrige solo si es necesario. Toca el campo y edita.</p>
@@ -85,10 +62,9 @@
                 <button id="cancel-verify-btn" class="btn-secondary">🔄 Cancelar</button>
             </section>
 
-            <!-- Pantalla 5: Entrada Manual -->
             <section id="manual-section" class="manual-section hidden">
                 <h2>Introducir manualmente</h2>
-                <p class="hint">No se detectaron datos. Introdúcelos aquí:</p>
+                <p class="hint">La IA no encontró datos. Introdúcelos aquí:</p>
                 <div class="manual-input-group">
                     <label>Albarán 1</label>
                     <input type="text" id="manual-alb-1" placeholder="Ej: 0082263334">
@@ -107,14 +83,12 @@
                 <button id="generate-manual-btn" class="btn-primary">Generar Códigos</button>
             </section>
 
-            <!-- Pantalla 6: Resultados -->
             <section id="results-section" class="results-section hidden">
                 <h2>Códigos Generados</h2>
                 <div id="barcodes-container"></div>
                 <button id="clear-data-btn" class="btn-secondary">🗑️ Borrar datos guardados</button>
             </section>
 
-            <!-- Pantalla 7: Error -->
             <section id="error-section" class="error-section hidden">
                 <div class="error-message">
                     <span class="error-icon">⚠️</span>
@@ -123,24 +97,24 @@
                 <button id="retry-btn" class="btn-secondary">Reintentar</button>
             </section>
 
-            <!-- Pantalla 8: Aviso API Key -->
+            <!-- SECCIÓN DE CONFIGURACIÓN SEGURA DE API KEY -->
             <section id="api-warning-section" class="api-warning-section hidden">
                 <div class="error-message">
                     <span class="error-icon">🔑</span>
-                    <p id="api-warning-text">La clave de OCR no está configurada correctamente</p>
+                    <p id="api-warning-text">Necesitas configurar tu clave de API de Gemini</p>
                 </div>
-                <button id="dismiss-api-warning" class="btn-secondary">Entendido</button>
+                <p class="hint">Pega aquí tu clave de Google AI Studio (empieza por "AIza"). Se guardará solo en este dispositivo.</p>
+                <input type="text" id="api-key-input" class="verify-input" placeholder="AIzaSy..." style="margin-bottom: 10px;">
+                <button id="save-api-key-btn" class="btn-primary">💾 Guardar Clave de forma segura</button>
+                <button id="dismiss-api-warning" class="btn-secondary">Cancelar</button>
             </section>
         </main>
 
-        <footer>
-            <p>100% Offline y Privado</p>
-        </footer>
+        <footer><p>100% Privado y Seguro</p></footer>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
-    <script src="app.js?v=9"></script>
+    <script src="app.js?v=10"></script>
 </body>
 </html>

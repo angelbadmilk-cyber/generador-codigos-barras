@@ -26,23 +26,52 @@ Si no encuentras ninguno que coincida, responde ÚNICAMENTE con la palabra: NO_E
         }]
     };
 
-    try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${GEMINI_API_KEY}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(requestBody)
-        });
+    // Lista de modelos a probar en orden (si uno falla, prueba el siguiente)
+    const models = [
+        'gemini-3.8-flash',
+        'gemini-2.5-flash',
+        'gemini-2.0-flash-001'
+    ];
 
-        const data = await response.json();
+    let lastError = null;
 
-        if (data.error) {
-            throw new Error(data.error.message);
+    // Probar cada modelo hasta que uno funcione
+    for (const model of models) {
+        try {
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestBody)
+            });
+
+            const data = await response.json();
+
+            if (data.error) {
+                // Si el error es por alta demanda, probar el siguiente modelo
+                if (data.error.message.includes('high demand') || data.error.code === 429) {
+                    lastError = data.error.message;
+                    continue; // Probar siguiente modelo
+                }
+                // Otros errores (como modelo no encontrado), también probar siguiente
+                lastError = data.error.message;
+                continue;
+            }
+
+            // Si llegamos aquí, el modelo funcionó
+            res.status(200).json({ 
+                text: data.candidates[0].content.parts[0].text.trim(),
+                model: model // Información útil para debugging
+            });
+            return;
+
+        } catch (error) {
+            lastError = error.message;
+            continue; // Probar siguiente modelo
         }
-
-        res.status(200).json({ 
-            text: data.candidates[0].content.parts[0].text.trim() 
-        });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
     }
+
+    // Si todos los modelos fallaron
+    res.status(500).json({ 
+        error: `Todos los modelos fallaron. Último error: ${lastError}` 
+    });
 }

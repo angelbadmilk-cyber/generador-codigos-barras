@@ -1,5 +1,5 @@
 // ===== CONFIGURACIÓN =====
-const MAX_RETRIES = 2;
+const MAX_RETRIES = 1; // Reducido a 1 (el fallback ya está en el servidor)
 
 // ===== ELEMENTOS DEL DOM =====
 const themeToggle = document.getElementById('theme-toggle');
@@ -160,14 +160,14 @@ cancelCropBtn.addEventListener('click', () => {
     showSection(previewSection);
 });
 
-// ===== PREPARAR IMAGEN (COMPRESIÓN) =====
+// ===== PREPARAR IMAGEN (COMPRESIÓN AGRESIVA PARA VELOCIDAD) =====
 async function prepareImageForAPI(imageDataUrl) {
     return new Promise((resolve) => {
         const img = new Image();
         img.onload = () => {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
-            const maxWidth = 1000;
+            const maxWidth = 600; // Reducido de 1000 a 600 para velocidad
             let width = img.width;
             let height = img.height;
             if (width > maxWidth) {
@@ -177,7 +177,7 @@ async function prepareImageForAPI(imageDataUrl) {
             canvas.width = width;
             canvas.height = height;
             ctx.drawImage(img, 0, 0, width, height);
-            resolve(canvas.toDataURL('image/jpeg', 0.7));
+            resolve(canvas.toDataURL('image/jpeg', 0.5)); // Calidad reducida a 0.5 para velocidad
         };
         img.src = imageDataUrl;
     });
@@ -205,10 +205,6 @@ async function processWithGemini(imageDataUrl) {
     
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {
-            if (attempt > 1) {
-                loadingStatus.textContent = `Reintento ${attempt}/${MAX_RETRIES}...`;
-                await new Promise(resolve => setTimeout(resolve, 1000));
-            }
             text = await callGeminiAPI(imageDataUrl);
             break;
         } catch (error) {

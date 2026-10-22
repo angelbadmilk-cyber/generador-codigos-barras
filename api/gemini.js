@@ -13,7 +13,7 @@ export default async function handler(req, res) {
 
     const base64Data = imageDataUrl.split(',')[1];
     
-    const prompt = `Eres un asistente experto en extracción de datos de tablas logísticas. Analiza la imagen adjunta. Busca en la tabla las filas donde el cliente sea "VALENCIA MODULOS DE PUERTA". Extrae un MÁXIMO de 4 albaranes y sus fechas. Responde ÚNICAMENTE con este formato, sin markdown, sin negritas, sin explicaciones, sin saludo:
+    const prompt = `Eres un asistente experto en extracción de datos de tablas logísticas. Analiza la imagen adjunta. Busca en la tabla las filas donde el cliente sea "VALENCIA MODULOS DE PUERTA". Extrae un MÁXIMO de 5 albaranes y sus fechas. Responde ÚNICAMENTE con este formato, sin markdown, sin negritas, sin explicaciones, sin saludo:
 ALBARAN: [numero] | FECHA: [fecha]
 Si no encuentras ninguno que coincida, responde ÚNICAMENTE con la palabra: NO_ENCONTRADO`;
 

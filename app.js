@@ -46,14 +46,14 @@ function initTheme() {
         document.body.classList.add('dark-mode');
         themeIcon.textContent = '☀️';
     } else {
-        themeIcon.textContent = '';
+        themeIcon.textContent = '🌙';
     }
 }
 
 themeToggle.addEventListener('click', () => {
     document.body.classList.toggle('dark-mode');
     const isDark = document.body.classList.contains('dark-mode');
-    themeIcon.textContent = isDark ? '☀️' : '';
+    themeIcon.textContent = isDark ? '☀️' : '🌙';
     localStorage.setItem('theme', isDark ? 'dark' : 'light');
 });
 
@@ -160,7 +160,7 @@ cancelCropBtn.addEventListener('click', () => {
     showSection(previewSection);
 });
 
-// ===== PREPARAR IMAGEN =====
+// ===== PREPARAR IMAGEN (COMPRESIÓN) =====
 async function prepareImageForAPI(imageDataUrl) {
     return new Promise((resolve) => {
         const img = new Image();
@@ -201,7 +201,7 @@ processBtn.addEventListener('click', async () => {
 async function processWithGemini(imageDataUrl) {
     loadingStatus.textContent = 'Procesando con IA...';
     let text = null;
-    let lastErrorMsg = 'Error desconocido'; // AQUÍ GUARDAMOS EL ERROR REAL
+    let lastErrorMsg = 'Error desconocido';
     
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {
@@ -212,13 +212,12 @@ async function processWithGemini(imageDataUrl) {
             text = await callGeminiAPI(imageDataUrl);
             break;
         } catch (error) {
-            lastErrorMsg = error.message; // CAPTURAMOS EL MENSAJE EXACTO
+            lastErrorMsg = error.message;
             console.error(`Intento ${attempt} falló:`, error);
         }
     }
     
     if (!text) {
-        // AHORA MOSTRAMOS EL ERROR REAL EN PANTALLA
         showError('Error de IA: ' + lastErrorMsg);
         return;
     }
@@ -246,7 +245,7 @@ async function callGeminiAPI(imageDataUrl) {
     });
 
     if (!response.ok) {
-        const err = await response.json().catch(() => ({ error: 'Error desconocido del servidor (posible timeout de Vercel)' }));
+        const err = await response.json().catch(() => ({ error: 'Error desconocido del servidor' }));
         throw new Error(err.error || `Error del servidor: ${response.status}`);
     }
 
@@ -261,7 +260,7 @@ function parseGeminiResponse(text) {
         const match = line.match(/ALBARAN:\s*(\d+)\s*\|\s*FECHA:\s*(.+)/i);
         if (match) {
             albaranes.push({ numero: match[1].trim(), fecha: match[2].trim() });
-            if (albaranes.length >= 4) break;
+            if (albaranes.length >= 5) break;
         }
     }
     return albaranes;
@@ -270,7 +269,7 @@ function parseGeminiResponse(text) {
 // ===== VERIFICACIÓN Y GENERACIÓN =====
 function showVerificationScreen() {
     verifyContainer.innerHTML = '';
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 5; i++) {
         const data = detectedAlbaranes[i] || { numero: '', fecha: '' };
         const row = document.createElement('div');
         row.className = 'verify-row';
@@ -310,7 +309,7 @@ cancelVerifyBtn.addEventListener('click', () => { currentImageData = null; showS
 
 generateManualBtn.addEventListener('click', async () => {
     const albaranes = [];
-    for (let i = 1; i <= 4; i++) {
+    for (let i = 1; i <= 5; i++) {
         const num = document.getElementById(`manual-alb-${i}`).value.trim();
         const fecha = document.getElementById(`manual-fecha-${i}`).value.trim();
         if (num && fecha) albaranes.push({ numero: num, fecha: fecha });

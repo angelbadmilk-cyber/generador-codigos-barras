@@ -26,16 +26,14 @@ Si no encuentras ninguno que coincida, responde ÚNICAMENTE con la palabra: NO_E
         }]
     };
 
-    // Lista de modelos a probar en orden (si uno falla, prueba el siguiente)
+    // Modelos estables y actuales (finales de 2026)
     const models = [
         'gemini-3.8-flash',
-        'gemini-2.5-flash',
-        'gemini-2.0-flash-001'
+        'gemini-3.6-flash'
     ];
 
     let lastError = null;
 
-    // Probar cada modelo hasta que uno funcione
     for (const model of models) {
         try {
             const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`, {
@@ -47,31 +45,39 @@ Si no encuentras ninguno que coincida, responde ÚNICAMENTE con la palabra: NO_E
             const data = await response.json();
 
             if (data.error) {
-                // Si el error es por alta demanda, probar el siguiente modelo
-                if (data.error.message.includes('high demand') || data.error.code === 429) {
-                    lastError = data.error.message;
-                    continue; // Probar siguiente modelo
-                }
-                // Otros errores (como modelo no encontrado), también probar siguiente
                 lastError = data.error.message;
-                continue;
+                
+                // Si es por alta demanda, esperamos 1.5 segundos y probamos el siguiente modelo
+                if (data.error.message.includes('high demand') || data.error.code === 429) {
+                    await new Promise(r => setTimeout(r, 1500));
+                    continue; 
+                }
+                
+                // Si el modelo no existe o no está soportado, pasamos al siguiente inmediatamente
+                if (data.error.message.includes('no longer available') || data.error.code === 404) {
+                    continue;
+                }
+                
+                throw new Error(lastError);
             }
 
-            // Si llegamos aquí, el modelo funcionó
+            // Éxito: devolvemos el texto y el modelo que funcionó
             res.status(200).json({ 
                 text: data.candidates[0].content.parts[0].text.trim(),
-                model: model // Información útil para debugging
+                model: model
             });
             return;
 
         } catch (error) {
             lastError = error.message;
-            continue; // Probar siguiente modelo
+            // Si fue un error de red, esperamos un poco y probamos el siguiente
+            await new Promise(r => setTimeout(r, 1000));
+            continue;
         }
     }
 
     // Si todos los modelos fallaron
     res.status(500).json({ 
-        error: `Todos los modelos fallaron. Último error: ${lastError}` 
+        error: `La IA no pudo procesar la imagen. Detalle: ${lastError}` 
     });
 }

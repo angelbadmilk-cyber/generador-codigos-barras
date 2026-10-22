@@ -1,4 +1,3 @@
-// Este archivo vive en el servidor de Vercel. Aquí es donde se guarda el secreto de forma segura.
 export default async function handler(req, res) {
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Método no permitido' });
@@ -13,9 +12,10 @@ export default async function handler(req, res) {
 
     const base64Data = imageDataUrl.split(',')[1];
     
-    const prompt = `Eres un asistente experto en extracción de datos de tablas logísticas. Analiza la imagen adjunta. Busca en la tabla las filas donde el cliente sea "VALENCIA MODULOS DE PUERTA". Extrae un MÁXIMO de 5 albaranes y sus fechas. Responde ÚNICAMENTE con este formato, sin markdown, sin negritas, sin explicaciones, sin saludo:
+    // Prompt ultra-corto para máxima velocidad de procesamiento
+    const prompt = `Extrae MÁXIMO 5 albaranes y fechas de filas con cliente "VALENCIA MODULOS DE PUERTA". Formato exacto, sin markdown:
 ALBARAN: [numero] | FECHA: [fecha]
-Si no encuentras ninguno que coincida, responde ÚNICAMENTE con la palabra: NO_ENCONTRADO`;
+Si no hay, responde: NO_ENCONTRADO`;
 
     const requestBody = {
         contents: [{
@@ -26,58 +26,49 @@ Si no encuentras ninguno que coincida, responde ÚNICAMENTE con la palabra: NO_E
         }]
     };
 
-    // Modelos estables y actuales (finales de 2026)
-    const models = [
-        'gemini-3.8-flash',
-        'gemini-3.6-flash'
-    ];
-
+    const models = ['gemini-3.8-flash', 'gemini-3.6-flash'];
     let lastError = null;
 
     for (const model of models) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 segundos máximo por modelo
+
         try {
             const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestBody)
+                body: JSON.stringify(requestBody),
+                signal: controller.signal
             });
+            clearTimeout(timeoutId);
 
             const data = await response.json();
 
             if (data.error) {
                 lastError = data.error.message;
-                
-                // Si es por alta demanda, esperamos 1.5 segundos y probamos el siguiente modelo
                 if (data.error.message.includes('high demand') || data.error.code === 429) {
-                    await new Promise(r => setTimeout(r, 1500));
+                    await new Promise(r => setTimeout(r, 1000));
                     continue; 
                 }
-                
-                // Si el modelo no existe o no está soportado, pasamos al siguiente inmediatamente
                 if (data.error.message.includes('no longer available') || data.error.code === 404) {
                     continue;
                 }
-                
                 throw new Error(lastError);
             }
 
-            // Éxito: devolvemos el texto y el modelo que funcionó
-            res.status(200).json({ 
-                text: data.candidates[0].content.parts[0].text.trim(),
-                model: model
-            });
+            res.status(200).json({ text: data.candidates[0].content.parts[0].text.trim(), model: model });
             return;
 
         } catch (error) {
-            lastError = error.message;
-            // Si fue un error de red, esperamos un poco y probamos el siguiente
-            await new Promise(r => setTimeout(r, 1000));
+            clearTimeout(timeoutId);
+            if (error.name === 'AbortError') {
+                lastError = 'Timeout: La IA tardó más de 10s en responder.';
+            } else {
+                lastError = error.message;
+            }
             continue;
         }
     }
 
-    // Si todos los modelos fallaron
-    res.status(500).json({ 
-        error: `La IA no pudo procesar la imagen. Detalle: ${lastError}` 
-    });
+    res.status(500).json({ error: `La IA no respondió a tiempo. Detalle: ${lastError}` });
 }

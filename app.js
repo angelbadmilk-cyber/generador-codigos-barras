@@ -1,5 +1,5 @@
 // ===== CONFIGURACIÓN =====
-const MAX_RETRIES = 1; // Reducido a 1 (el fallback ya está en el servidor)
+const MAX_RETRIES = 1;
 
 // ===== ELEMENTOS DEL DOM =====
 const themeToggle = document.getElementById('theme-toggle');
@@ -130,7 +130,7 @@ rotateBtn.addEventListener('click', () => {
         ctx.translate(canvas.width / 2, canvas.height / 2);
         ctx.rotate((currentRotation * Math.PI) / 180);
         ctx.drawImage(img, -img.width / 2, -img.height / 2);
-        currentImageData = canvas.toDataURL('image/jpeg', 0.8);
+        currentImageData = canvas.toDataURL('image/jpeg', 0.6);
         previewImage.src = currentImageData;
     };
     img.src = currentImageData;
@@ -148,7 +148,7 @@ cropBtn.addEventListener('click', () => {
 
 confirmCropBtn.addEventListener('click', () => {
     if (cropper) {
-        currentImageData = cropper.getCroppedCanvas().toDataURL('image/jpeg', 0.8);
+        currentImageData = cropper.getCroppedCanvas().toDataURL('image/jpeg', 0.6);
         previewImage.src = currentImageData;
         cropper.destroy(); cropper = null;
         showSection(previewSection);
@@ -160,14 +160,14 @@ cancelCropBtn.addEventListener('click', () => {
     showSection(previewSection);
 });
 
-// ===== PREPARAR IMAGEN (COMPRESIÓN AGRESIVA PARA VELOCIDAD) =====
+// ===== PREPARAR IMAGEN =====
 async function prepareImageForAPI(imageDataUrl) {
     return new Promise((resolve) => {
         const img = new Image();
         img.onload = () => {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
-            const maxWidth = 600; // Reducido de 1000 a 600 para velocidad
+            const maxWidth = 500; // Reducido a 500px para máxima velocidad
             let width = img.width;
             let height = img.height;
             if (width > maxWidth) {
@@ -177,7 +177,7 @@ async function prepareImageForAPI(imageDataUrl) {
             canvas.width = width;
             canvas.height = height;
             ctx.drawImage(img, 0, 0, width, height);
-            resolve(canvas.toDataURL('image/jpeg', 0.5)); // Calidad reducida a 0.5 para velocidad
+            resolve(canvas.toDataURL('image/jpeg', 0.5));
         };
         img.src = imageDataUrl;
     });
@@ -234,19 +234,32 @@ async function processWithGemini(imageDataUrl) {
 }
 
 async function callGeminiAPI(imageDataUrl) {
-    const response = await fetch('/api/gemini', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageDataUrl })
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 segundos máximo
 
-    if (!response.ok) {
-        const err = await response.json().catch(() => ({ error: 'Error desconocido del servidor' }));
-        throw new Error(err.error || `Error del servidor: ${response.status}`);
+    try {
+        const response = await fetch('/api/gemini', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ imageDataUrl }),
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({ error: 'Error del servidor' }));
+            throw new Error(err.error || `Error del servidor: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data.text;
+    } catch (error) {
+        clearTimeout(timeoutId);
+        if (error.name === 'AbortError') {
+            throw new Error('La IA está tardando demasiado (Timeout). Intenta recortar más la imagen o usa el modo manual.');
+        }
+        throw error;
     }
-
-    const data = await response.json();
-    return data.text;
 }
 
 function parseGeminiResponse(text) {
